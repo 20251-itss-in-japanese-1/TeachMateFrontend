@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Teacher, Notification } from './types';
 import { mockTeachers, mockGroups, mockFriendRequests, mockReports, mockSessions, mockAppointments, mockNotifications } from './data/mockData';
 import { LoginRegistration } from './components/LoginRegistration';
@@ -20,6 +20,7 @@ import { translations, Language } from './translations';
 import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { getUserProfile } from './apis/user.api';
 import 'antd/dist/reset.css';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
@@ -30,6 +31,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<Teacher | null>(null);
   const [language, setLanguage] = useState<Language>('ja');
   const [activeView, setActiveView] = useState<ViewType>('home');
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedProfile, setSelectedProfile] = useState<Teacher | null>(null);
   const [chatTeacher, setChatTeacher] = useState<Teacher | null>(null);
   const [chatGroup, setChatGroup] = useState<any>(null);
@@ -43,6 +45,46 @@ export default function App() {
 
   const t = translations[language];
 
+  // Check for existing token on mount and fetch user profile
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          // Fetch user profile from API
+          const response = await getUserProfile();
+          
+          if (response.success) {
+            const userData = response.data;
+            const user: Teacher = {
+              id: userData._id,
+              name: userData.name,
+              nationality: userData.nationality,
+              avatar: userData.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+              specialties: userData.specialties_major,
+              experience: userData.yearsExperience || userData.experience,
+              interests: userData.specialties_interest,
+              bio: userData.introduction || userData.bio,
+              subjects: userData.specialties_subject
+            };
+            setCurrentUser(user);
+            setIsAuthenticated(true);
+          } else {
+            // Invalid token, remove it
+            localStorage.removeItem('token');
+          }
+        } catch (error) {
+          console.error('Failed to fetch user profile:', error);
+          // If token is invalid, remove it
+          localStorage.removeItem('token');
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initAuth();
+  }, []);
+
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'ja' ? 'vi' : 'ja');
   };
@@ -54,20 +96,37 @@ export default function App() {
     toast.success('Admin login successful');
   };
 
-  const handleLogin = (userData: { name: string; email: string; nationality: 'Japanese' | 'Vietnamese' }) => {
-    const newUser: Teacher = {
-      id: 'current-user',
-      name: userData.name,
-      nationality: userData.nationality,
-      avatar: 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-      specialties: ['General Education'],
-      experience: 5,
-      interests: ['Teaching Methods', 'Cultural Exchange'],
-      bio: 'Passionate educator looking to connect with teachers worldwide.',
-      subjects: ['Various']
-    };
-    setCurrentUser(newUser);
-    setIsAuthenticated(true);
+  const handleLogin = async (userData: { name: string; email: string; nationality: 'Japanese' | 'Vietnamese' }, token?: string) => {
+    // Only store token in localStorage
+    if (token) {
+      localStorage.setItem('token', token);
+      
+      try {
+        // Fetch user profile from API after login
+        const response = await getUserProfile();
+        
+        if (response.success) {
+          const apiUserData = response.data;
+          const newUser: Teacher = {
+            id: apiUserData._id,
+            name: apiUserData.name,
+            nationality: apiUserData.nationality,
+            avatar: apiUserData.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+            specialties: apiUserData.specialties_major,
+            experience: apiUserData.yearsExperience || apiUserData.experience,
+            interests: apiUserData.specialties_interest,
+            bio: apiUserData.introduction || apiUserData.bio,
+            subjects: apiUserData.specialties_subject
+          };
+          setCurrentUser(newUser);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile after login:', error);
+        toast.error('Failed to load user profile');
+        localStorage.removeItem('token');
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -76,6 +135,9 @@ export default function App() {
     setCurrentUser(null);
     setActiveView('home');
     setChatTeacher(null);
+    
+    // Clear stored token
+    localStorage.removeItem('token');
   };
 
   const handleMarkAsRead = (notificationId: string) => {
@@ -147,6 +209,18 @@ export default function App() {
   const handleCreateGroup = () => {
     setIsCreateGroupModalOpen(true);
   };
+
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show login screen if not authenticated
   if (!isAuthenticated) {

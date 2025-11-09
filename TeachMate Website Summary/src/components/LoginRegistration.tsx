@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -6,6 +6,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { translations, Language } from '../translations';
 import { GraduationCap } from 'lucide-react';
+import { login, register } from '../apis/auth.api';
 
 const ADMIN_CREDENTIALS = {
   username: "admin@gmail.com",
@@ -17,7 +18,7 @@ interface LoginRegistrationProps {
     name: string;
     email: string;
     nationality: 'Japanese' | 'Vietnamese';
-  }) => void;
+  }, token?: string) => Promise<void>;
   onAdminLogin?: () => void;
   language: Language;
 }
@@ -25,6 +26,8 @@ interface LoginRegistrationProps {
 export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegistrationProps) {
   const t = translations[language];
   const [isLogin, setIsLogin] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -33,58 +36,114 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
     nationality: '' as 'Japanese' | 'Vietnamese' | ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Check for token in URL on component mount (OAuth callback)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (token) {
+      // Clear the token from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Handle login with token
+      handleOAuthCallback(token);
+    }
+  }, []);
 
-    if (isLogin) {
-      // Check for admin credentials
-      if (formData.email === ADMIN_CREDENTIALS.username && formData.password === ADMIN_CREDENTIALS.password) {
-        if (onAdminLogin) {
-          onAdminLogin();
+  const handleOAuthCallback = async (token: string) => {
+    setIsLoading(true);
+    try {
+      await onLogin({
+        name: 'User',
+        email: 'user@example.com',
+        nationality: 'Japanese'
+      }, token);
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      setError('Failed to complete social login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      if (isLogin) {
+        // Check for admin credentials
+        if (formData.email === ADMIN_CREDENTIALS.username && formData.password === ADMIN_CREDENTIALS.password) {
+          if (onAdminLogin) {
+            onAdminLogin();
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Call login API
+        const response = await login({
+          email: formData.email,
+          password: formData.password
+        });
+
+
+        await onLogin({
+          name: formData.email.split('@')[0] || 'User',
+          email: formData.email,
+          nationality: 'Japanese'
+        }, response.data?.token);
+
+      } else {
+        // Validate registration form
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match!');
+          setIsLoading(false);
           return;
         }
-      }
+        if (!formData.nationality) {
+          setError('Please select a nationality');
+          setIsLoading(false);
+          return;
+        }
 
-      // Mock login for regular users
-      onLogin({
-        name: 'Demo User',
-        email: formData.email,
-        nationality: 'Japanese'
-      });
-    } else {
-      // Mock registration
-      if (formData.password !== formData.confirmPassword) {
-        alert('Passwords do not match!');
-        return;
+        // Call register API
+        await register({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          nationality: formData.nationality
+        });
+
+        // Auto-login after registration
+        const loginResponse = await login({
+          email: formData.email,
+          password: formData.password
+        });
+        await onLogin({
+          name: formData.name,
+          email: formData.email,
+          nationality: formData.nationality
+        }, loginResponse.data?.token);
       }
-      if (!formData.nationality) {
-        alert('Please select a nationality');
-        return;
-      }
-      onLogin({
-        name: formData.name,
-        email: formData.email,
-        nationality: formData.nationality
-      });
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || 'An error occurred. Please try again.';
+      setError(errorMessage);
+      console.error('Authentication error:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
-    // Mock social login - in production, this would redirect to OAuth provider
-    const mockUserData = {
-      google: {
-        name: 'Google User',
-        email: 'user@gmail.com',
-        nationality: 'Japanese' as const
-      },
-      facebook: {
-        name: 'Facebook User',
-        email: 'user@facebook.com',
-        nationality: 'Japanese' as const
-      }
-    };
-
-    onLogin(mockUserData[provider]);
+    if (provider === 'google') {
+      // Redirect to backend Google OAuth endpoint
+      window.location.href = 'http://localhost:3000/api/v1/auth/google';
+    } else if (provider === 'facebook') {
+      // Redirect to backend Facebook OAuth endpoint
+      window.location.href = 'http://localhost:3000/api/v1/auth/facebook';
+    }
   };
 
   return (
@@ -170,11 +229,18 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
             </>
           )}
 
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
           <Button
             type="submit"
             className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+            disabled={isLoading}
           >
-            {isLogin ? t.login : t.register}
+            {isLoading ? (t.loading || 'Loading...') : (isLogin ? t.login : t.register)}
           </Button>
         </form>
 
@@ -194,6 +260,7 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
               variant="outline"
               onClick={() => handleSocialLogin('google')}
               className="w-full border-2 hover:bg-gray-50"
+              disabled={isLoading}
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                 <path
@@ -216,13 +283,12 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
               {t.continueWithGoogle}
             </Button>
 
-
-
             <Button
               type="button"
               variant="outline"
               onClick={() => handleSocialLogin('facebook')}
               className="w-full border-2 hover:bg-gray-50"
+              disabled={isLoading}
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="#1877F2">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />

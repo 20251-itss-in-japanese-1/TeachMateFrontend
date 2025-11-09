@@ -1,6 +1,9 @@
+import { lazy } from "react";
+
 export const translations = {
   ja: {
     appName: 'TeachMate',
+    loading: '読み込み中...',
     tagline: '日本とベトナムの教師をつなぐ',
     home: 'ホーム',
     teachers: '教師検索',
@@ -126,6 +129,7 @@ export const translations = {
   },
   vi: {
     appName: 'TeachMate',
+    loading: 'Đang tải...',
     tagline: 'Kết nối giáo viên Nhật Bản và Việt Nam',
     home: 'Trang chủ',
     teachers: 'Tìm giáo viên',
