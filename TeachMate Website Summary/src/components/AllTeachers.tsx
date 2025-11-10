@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher } from '../types';
 import { translations, Language } from '../translations';
 import {
@@ -12,7 +12,8 @@ import {
   Row,
   Col,
   Divider,
-  Pagination
+  Pagination,
+  Empty
 } from 'antd';
 import {
   SearchOutlined,
@@ -21,11 +22,11 @@ import {
   ArrowLeftOutlined
 } from '@ant-design/icons';
 import { TeacherCard } from './TeacherCard';
+import { friendSuggest } from '../apis/friend.api';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 interface AllTeachersProps {
-  teachers: Teacher[];
   language: Language;
   onSendFriendRequest: (teacher: Teacher) => void;
   onViewTeacherProfile: (teacher: Teacher) => void;
@@ -33,7 +34,6 @@ interface AllTeachersProps {
 }
 
 export function AllTeachers({
-  teachers,
   language,
   onSendFriendRequest,
   onViewTeacherProfile,
@@ -46,52 +46,81 @@ export function AllTeachers({
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
   const [selectedNationality, setSelectedNationality] = useState<string>('all');
   const [experienceRange, setExperienceRange] = useState<[number, number]>([0, 20]);
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
   const itemsPerPage = 12;
+
+  // API data states
+  const [suggestedTeachers, setSuggestedTeachers] = useState<Teacher[]>([]);
+  const [isLoadingTeachers, setIsLoadingTeachers] = useState(true);
+  const [totalTeachers, setTotalTeachers] = useState(0);
+
+  // Fetch friend suggestions from API
+  useEffect(() => {
+    const fetchFriendSuggestions = async () => {
+      setIsLoadingTeachers(true);
+      try {
+        const response = await friendSuggest(currentPage, itemsPerPage);
+
+        if (response.success) {
+          const mappedTeachers: Teacher[] = response.data.map(user => ({
+            id: user._id,
+            name: user.name,
+            nationality: user.nationality,
+            avatar: user.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+            specialties: user.specialties_major,
+            experience: user.yearsExperience || user.experience,
+            interests: user.specialties_interest,
+            bio: user.introduction || user.bio,
+            subjects: user.specialties_subject
+          }));
+
+          setSuggestedTeachers(mappedTeachers);
+          setTotalTeachers(response.meta.total);
+        }
+      } catch (error) {
+        console.error('Failed to fetch friend suggestions:', error);
+        setSuggestedTeachers([]);
+        setTotalTeachers(0);
+      } finally {
+        setIsLoadingTeachers(false);
+      }
+    };
+
+    fetchFriendSuggestions();
+  }, [currentPage, itemsPerPage]);
 
   // Get all unique specialties for filter
   const allSpecialties = useMemo(() => {
     const specialties = new Set<string>();
-    teachers.forEach(teacher => {
+    suggestedTeachers.forEach(teacher => {
       teacher.specialties.forEach(specialty => specialties.add(specialty));
     });
     return Array.from(specialties).sort();
-  }, [teachers]);
+  }, [suggestedTeachers]);
 
   // Filter teachers based on search and filters
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(teacher => {
-      // Search query filter
+    return suggestedTeachers.filter(teacher => {
       const matchesSearch = searchQuery === '' ||
         teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         teacher.specialties.some(specialty =>
           specialty.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        ) ||
+        teacher.bio.toLowerCase().includes(searchQuery.toLowerCase());
 
-      // Specialty filter
       const matchesSpecialty = selectedSpecialty === 'all' ||
         teacher.specialties.includes(selectedSpecialty);
 
-      // Nationality filter
       const matchesNationality = selectedNationality === 'all' ||
         teacher.nationality === selectedNationality;
 
-      // Experience range filter
       const matchesExperience = teacher.experience >= experienceRange[0] &&
         teacher.experience <= experienceRange[1];
 
       return matchesSearch && matchesSpecialty && matchesNationality && matchesExperience;
     });
-  }, [teachers, searchQuery, selectedSpecialty, selectedNationality, experienceRange]);
-
-  // Paginated teachers
-  const paginatedTeachers = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredTeachers.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredTeachers, currentPage]);
+  }, [suggestedTeachers, searchQuery, selectedSpecialty, selectedNationality, experienceRange]);
 
   // Clear all filters
   const clearFilters = () => {
@@ -99,27 +128,32 @@ export function AllTeachers({
     setSelectedSpecialty('all');
     setSelectedNationality('all');
     setExperienceRange([0, 20]);
-    setCurrentPage(1);
   };
-
-  const totalPages = Math.ceil(filteredTeachers.length / itemsPerPage);
 
   return (
     <div className="h-full overflow-auto bg-gradient-to-br from-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto p-8 space-y-6">
+      <div className="max-w-7xl mx-auto p-8 space-y-8">
         {/* Header */}
-        <Space size="middle">
-          <AntButton
-            type="default"
-            onClick={onBack}
-            icon={<ArrowLeftOutlined />}
-          >
-            {t.back}
-          </AntButton>
-          <Text className="text-3xl font-bold text-blue-600">
-            {language === 'ja' ? 'すべての教師' : 'Tất cả giáo viên'}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <AntButton
+              icon={<ArrowLeftOutlined />}
+              onClick={onBack}
+              size="large"
+            >
+              {language === 'ja' ? '戻る' : 'Quay lại'}
+            </AntButton>
+            <Title level={1} className="mb-0">
+              {language === 'ja' ? 'すべての教師' : 'Tất cả giáo viên'}
+            </Title>
+          </div>
+          <Text type="secondary" className="text-lg">
+            {isLoadingTeachers
+              ? (language === 'ja' ? '読み込み中...' : 'Đang tải...')
+              : `${totalTeachers} ${language === 'ja' ? '人の教師' : 'giáo viên'}`
+            }
           </Text>
-        </Space>
+        </div>
 
         {/* Search and Filter Section */}
         <Card className="shadow-lg" bodyStyle={{ padding: '24px' }}>
@@ -217,28 +251,33 @@ export function AllTeachers({
 
         {/* Teachers Grid Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          {filteredTeachers.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <SearchOutlined style={{ fontSize: '32px', color: '#1890ff' }} />
-              </div>
-              <Text className="text-lg font-medium block mb-2">
-                {t.noTeachersFound}
-              </Text>
-              <Text type="secondary" className="block mb-4">
-                {language === 'ja'
-                  ? '検索条件を変更して再試行してください'
-                  : 'Hãy thử thay đổi bộ lọc tìm kiếm'}
-              </Text>
-              <AntButton type="primary" onClick={clearFilters}>
-                {t.clearFilters}
-              </AntButton>
+          {isLoadingTeachers ? (
+            <div className="flex justify-center items-center py-20">
+              <Space direction="vertical" align="center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <Text type="secondary">{language === 'ja' ? '読み込み中...' : 'Đang tải...'}</Text>
+              </Space>
             </div>
+          ) : filteredTeachers.length === 0 ? (
+            <Empty
+              description={
+                <Space direction="vertical">
+                  <Text>{language === 'ja' ? '教師が見つかりません' : 'Không tìm thấy giáo viên nào'}</Text>
+                  <Text type="secondary" className="block mb-4">
+                    {language === 'ja'
+                      ? '検索条件を変更して再試行してください'
+                      : 'Hãy thử thay đổi bộ lọc tìm kiếm'}
+                  </Text>
+                  <AntButton onClick={clearFilters}>
+                    {language === 'ja' ? 'フィルターをクリア' : 'Xóa bộ lọc'}
+                  </AntButton>
+                </Space>
+              }
+            />
           ) : (
-            <Space direction="vertical" size="large" className="w-full">
-              {/* Teachers Grid */}
+            <>
               <Row gutter={[16, 16]}>
-                {paginatedTeachers.map((teacher) => (
+                {filteredTeachers.map((teacher) => (
                   <Col xs={24} sm={12} lg={8} xl={6} key={teacher.id}>
                     <TeacherCard
                       teacher={teacher}
@@ -251,27 +290,23 @@ export function AllTeachers({
               </Row>
 
               {/* Pagination */}
-              {totalPages > 1 && (
-                <>
-                  <Divider className="my-4" />
-                  <div className="flex justify-center">
-                    <Pagination
-                      current={currentPage}
-                      total={filteredTeachers.length}
-                      pageSize={itemsPerPage}
-                      onChange={setCurrentPage}
-                      showSizeChanger={false}
-                      showQuickJumper
-                      showTotal={(total) =>
-                        language === 'ja'
-                          ? `合計 ${total} 件`
-                          : `Tổng ${total} kết quả`
-                      }
-                    />
-                  </div>
-                </>
+              {totalTeachers > itemsPerPage && (
+                <div className="flex justify-center mt-8">
+                  <Pagination
+                    current={currentPage}
+                    total={totalTeachers}
+                    pageSize={itemsPerPage}
+                    onChange={setCurrentPage}
+                    showSizeChanger={false}
+                    showTotal={(total) =>
+                      language === 'ja'
+                        ? `合計 ${total} 人`
+                        : `Tổng cộng ${total} giáo viên`
+                    }
+                  />
+                </div>
               )}
-            </Space>
+            </>
           )}
         </div>
       </div>

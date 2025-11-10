@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Teacher, Notification } from './types';
-import { mockTeachers, mockGroups, mockFriendRequests, mockReports, mockSessions, mockAppointments, mockNotifications } from './data/mockData';
+import { mockGroups, mockReports, mockSessions, mockAppointments } from './data/mockData';
 import { LoginRegistration } from './components/LoginRegistration';
 import { PrimaryNavbar } from './components/PrimaryNavbar';
 import { SecondarySidebar } from './components/SecondarySidebar';
@@ -21,9 +21,17 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { getUserProfile } from './apis/user.api';
+import { sendFriendRequest, getFriendRequest, acceptFriendRequest, rejectFriendRequest, getFriendList } from './apis/friend.api';
 import 'antd/dist/reset.css';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
+
+interface FriendRequest {
+  id: string;
+  fromUser: Teacher;
+  status: string;
+  createdAt: string;
+}
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -39,9 +47,9 @@ export default function App() {
   const [isViewingProfile, setIsViewingProfile] = useState(false);
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-  const [friends, setFriends] = useState<Teacher[]>([mockTeachers[0], mockTeachers[2]]);
-  const [friendRequests, setFriendRequests] = useState(mockFriendRequests);
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [friends, setFriends] = useState<Teacher[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [isLoadingFriendRequests, setIsLoadingFriendRequests] = useState(false);
 
   const t = translations[language];
 
@@ -84,6 +92,80 @@ export default function App() {
 
     initAuth();
   }, []);
+
+  // Fetch friend requests when authenticated
+  useEffect(() => {
+    const fetchFriendRequests = async () => {
+      if (!isAuthenticated || isAdmin) return;
+      
+      setIsLoadingFriendRequests(true);
+      try {
+        const response = await getFriendRequest();
+        
+        if (response.success) {
+          // Map API data to FriendRequest interface
+          const mappedRequests: FriendRequest[] = response.data.map(request => ({
+            id: request._id,
+            fromUser: {
+              id: request.fromUserId._id,
+              name: request.fromUserId.name,
+              nationality: request.fromUserId.nationality,
+              avatar: request.fromUserId.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+              specialties: request.fromUserId.specialties_major,
+              experience: request.fromUserId.yearsExperience || request.fromUserId.experience,
+              interests: request.fromUserId.specialties_interest,
+              bio: request.fromUserId.introduction || request.fromUserId.bio,
+              subjects: request.fromUserId.specialties_subject
+            },
+            status: request.status,
+            createdAt: request.createdAt
+          }));
+          
+          setFriendRequests(mappedRequests);
+        }
+      } catch (error) {
+        console.error('Failed to fetch friend requests:', error);
+        setFriendRequests([]);
+      } finally {
+        setIsLoadingFriendRequests(false);
+      }
+    };
+
+    fetchFriendRequests();
+  }, [isAuthenticated, isAdmin]);
+
+  // Fetch friend list when authenticated
+  useEffect(() => {
+    const fetchFriendList = async () => {
+      if (!isAuthenticated || isAdmin) return;
+      
+      try {
+        const response = await getFriendList();
+        
+        if (response.success) {
+          // Map API data to Teacher interface
+          const mappedFriends: Teacher[] = response.data.friends.map(friend => ({
+            id: friend._id,
+            name: friend.name,
+            nationality: friend.nationality,
+            avatar: friend.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+            specialties: friend.specialties_major,
+            experience: friend.yearsExperience || friend.experience,
+            interests: friend.specialties_interest,
+            bio: friend.introduction || friend.bio,
+            subjects: friend.specialties_subject
+          }));
+          
+          setFriends(mappedFriends);
+        }
+      } catch (error) {
+        console.error('Failed to fetch friend list:', error);
+        setFriends([]);
+      }
+    };
+
+    fetchFriendList();
+  }, [isAuthenticated, isAdmin]);
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'ja' ? 'vi' : 'ja');
@@ -140,24 +222,6 @@ export default function App() {
     localStorage.removeItem('token');
   };
 
-  const handleMarkAsRead = (notificationId: string) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === notificationId ? { ...notif, isRead: true } : notif
-      )
-    );
-  };
-
-  const handleMarkAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notif => ({ ...notif, isRead: true }))
-    );
-  };
-
-  const handleDeleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
-  };
-
   const handleSaveProfile = (updatedUser: Teacher) => {
     setCurrentUser(updatedUser);
     toast.success(language === 'ja' ? 'プロフィールを更新しました' : 'Đã cập nhật hồ sơ');
@@ -183,12 +247,33 @@ export default function App() {
     setActiveView('chat');
   };
 
-  const handleSendFriendRequest = (teacher: Teacher) => {
-    toast.success(
-      language === 'ja'
-        ? `${teacher.name}さんに友達リクエストを送信しました`
-        : `Đã gửi lời mời kết bạn đến ${teacher.name}`
-    );
+  const handleSendFriendRequest = async (teacher: Teacher) => {
+    try {
+      const response = await sendFriendRequest(teacher.id);
+      
+      if (response.success) {
+        toast.success(
+          language === 'ja'
+            ? `${teacher.name}さんに友達リクエストを送信しました`
+            : `Đã gửi lời mời kết bạn đến ${teacher.name}`
+        );
+      } else {
+        toast.error(
+          language === 'ja'
+            ? 'リクエストの送信に失敗しました'
+            : 'Gửi lời mời thất bại'
+        );
+      }
+    } catch (error: any) {
+      console.error('Failed to send friend request:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message;
+      toast.error(
+        language === 'ja'
+          ? `エラー: ${errorMessage}`
+          : `Lỗi: ${errorMessage}`
+      );
+    }
   };
 
   const handleJoinGroup = (groupId: string) => {
@@ -208,6 +293,109 @@ export default function App() {
 
   const handleCreateGroup = () => {
     setIsCreateGroupModalOpen(true);
+  };
+
+  const handleAcceptFriendRequest = async (requestId: string) => {
+    try {
+      const response = await acceptFriendRequest(requestId);
+      
+      if (response.success) {
+        toast.success(
+          language === 'ja'
+            ? '友達リクエストを承認しました'
+            : 'Đã chấp nhận lời mời kết bạn'
+        );
+        
+        // Remove the accepted request from the list
+        setFriendRequests(prev => prev.filter(req => req.id !== requestId));
+        
+        // Refetch friend list to update with new friend
+        const friendListResponse = await getFriendList();
+        if (friendListResponse.success) {
+          const mappedFriends: Teacher[] = friendListResponse.data.friends.map(friend => ({
+            id: friend._id,
+            name: friend.name,
+            nationality: friend.nationality,
+            avatar: friend.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+            specialties: friend.specialties_major,
+            experience: friend.yearsExperience || friend.experience,
+            interests: friend.specialties_interest,
+            bio: friend.introduction || friend.bio,
+            subjects: friend.specialties_subject
+          }));
+          setFriends(mappedFriends);
+        }
+        
+        // Optionally, refetch friend requests to update the list
+        const updatedRequests = await getFriendRequest();
+        if (updatedRequests.success) {
+          const mappedRequests: FriendRequest[] = updatedRequests.data.map(request => ({
+            id: request._id,
+            fromUser: {
+              id: request.fromUserId._id,
+              name: request.fromUserId.name,
+              nationality: request.fromUserId.nationality,
+              avatar: request.fromUserId.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
+              specialties: request.fromUserId.specialties_major,
+              experience: request.fromUserId.yearsExperience || request.fromUserId.experience,
+              interests: request.fromUserId.specialties_interest,
+              bio: request.fromUserId.introduction || request.fromUserId.bio,
+              subjects: request.fromUserId.specialties_subject
+            },
+            status: request.status,
+            createdAt: request.createdAt
+          }));
+          setFriendRequests(mappedRequests);
+        }
+      } else {
+        toast.error(
+          language === 'ja'
+            ? 'リクエストの承認に失敗しました'
+            : 'Không thể chấp nhận lời mời'
+        );
+      }
+    } catch (error: any) {
+      console.error('Failed to accept friend request:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message;
+      toast.error(
+        language === 'ja'
+          ? `エラー: ${errorMessage}`
+          : `Lỗi: ${errorMessage}`
+      );
+    }
+  };
+
+  const handleRejectFriendRequest = async (requestId: string) => {
+    try {
+      const response = await rejectFriendRequest(requestId);
+      
+      if (response.success) {
+        toast.success(
+          language === 'ja'
+            ? '友達リクエストを拒否しました'
+            : 'Đã từ chối lời mời kết bạn'
+        );
+        
+        // Remove the rejected request from the list
+        setFriendRequests(prev => prev.filter(req => req.id !== requestId));
+      } else {
+        toast.error(
+          language === 'ja'
+            ? 'リクエストの拒否に失敗しました'
+            : 'Không thể từ chối lời mời'
+        );
+      }
+    } catch (error: any) {
+      console.error('Failed to reject friend request:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message;
+      toast.error(
+        language === 'ja'
+          ? `エラー: ${errorMessage}`
+          : `Lỗi: ${errorMessage}`
+      );
+    }
   };
 
   // Show loading screen while checking authentication
@@ -264,7 +452,7 @@ export default function App() {
           onEditProfile={() => setIsEditingProfile(true)}
           onLogout={handleLogout}
           onViewNotifications={() => setActiveView('notifications')}
-          unreadNotificationsCount={notifications.filter(n => !n.isRead).length}
+          unreadNotificationsCount={0}
           language={language}
         />
 
@@ -280,6 +468,8 @@ export default function App() {
             onSelectGroup={handleSelectGroup}
             onAddFriend={handleAddFriend}
             onCreateGroup={handleCreateGroup}
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onRejectFriendRequest={handleRejectFriendRequest}
           />
         )}
 
@@ -300,7 +490,6 @@ export default function App() {
               <Homepage
                 user={currentUser!}
                 language={language}
-                teachers={mockTeachers}
                 groups={mockGroups}
                 exchangeSessions={mockSessions}
                 appointments={mockAppointments}
@@ -314,7 +503,6 @@ export default function App() {
 
             {activeView === 'all-teachers' && (
               <AllTeachers
-                teachers={mockTeachers}
                 language={language}
                 onSendFriendRequest={handleSendFriendRequest}
                 onViewTeacherProfile={setSelectedProfile}
@@ -332,15 +520,12 @@ export default function App() {
             )}
 
             {activeView === 'notifications' && (
-              <NotificationsPage
-                notifications={notifications}
-                teachers={mockTeachers}
-                language={language}
-                onMarkAsRead={handleMarkAsRead}
-                onMarkAllAsRead={handleMarkAllAsRead}
-                onDeleteNotification={handleDeleteNotification}
-                onBack={() => setActiveView('home')}
-              />
+              <>
+                <NotificationsPage
+                  language={language}
+                  onBack={() => setActiveView('home')}
+                />
+              </>
             )}
 
             {activeView === 'chat' && chatTeacher && (
@@ -416,7 +601,7 @@ export default function App() {
       <AddFriendModal
         open={isAddFriendModalOpen}
         onClose={() => setIsAddFriendModalOpen(false)}
-        teachers={mockTeachers}
+        teachers={[]}
         currentUserId={currentUser?.id || ''}
         onSendFriendRequest={handleSendFriendRequest}
         language={language}
@@ -425,7 +610,7 @@ export default function App() {
       <CreateGroupModal
         open={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
-        teachers={mockTeachers}
+        teachers={[]}
         onCreateGroup={(name, memberIds) => {
           toast.success(language === 'ja' ? `${name}を作成しました` : `Đã tạo nhóm ${name}`);
         }}
