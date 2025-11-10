@@ -19,16 +19,25 @@ const getAvatarColor = (id: string) => {
   return colors[index];
 };
 
+interface FriendRequest {
+  id: string;
+  fromUser: Teacher;
+  status: string;
+  createdAt: string;
+}
+
 interface SecondarySidebarProps {
   view: 'chat' | 'contacts';
   language: Language;
   friends: Teacher[];
-  groups: Array<{ id: string; name: string; memberCount: number; avatar: string }>;
-  friendRequests: Array<{ id: string; teacher: Teacher }>;
+  groups: Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
+  friendRequests: FriendRequest[];
   onSelectChat: (teacher: Teacher) => void;
-  onSelectGroup: (group: { id: string; name: string; memberCount: number; avatar: string }) => void;
+  onSelectGroup: (group: any) => void;
   onAddFriend: () => void;
   onCreateGroup: () => void;
+  onAcceptFriendRequest: (requestId: string) => void;
+  onRejectFriendRequest: (requestId: string) => void;
 }
 
 export function SecondarySidebar({
@@ -40,11 +49,34 @@ export function SecondarySidebar({
   onSelectChat,
   onSelectGroup,
   onAddFriend,
-  onCreateGroup
+  onCreateGroup,
+  onAcceptFriendRequest,
+  onRejectFriendRequest
 }: SecondarySidebarProps) {
   const t = translations[language];
   const [searchQuery, setSearchQuery] = useState('');
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
+  const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
+
+  const handleAccept = async (requestId: string) => {
+    setLoadingRequests(prev => new Set(prev).add(requestId));
+    await onAcceptFriendRequest(requestId);
+    setLoadingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(requestId);
+      return newSet;
+    });
+  };
+
+  const handleReject = async (requestId: string) => {
+    setLoadingRequests(prev => new Set(prev).add(requestId));
+    await onRejectFriendRequest(requestId);
+    setLoadingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(requestId);
+      return newSet;
+    });
+  };
 
   const filteredFriends = friends.filter(friend =>
     friend.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -230,26 +262,32 @@ export function SecondarySidebar({
                   className="flex items-center gap-2 p-2 rounded-lg bg-green-50/70 border border-green-200 hover:border-green-300 transition-all"
                 >
                   <Avatar className="w-8 h-8 flex-shrink-0 border border-green-200">
-                    {request.teacher.avatar ? (
-                      <AvatarImage src={request.teacher.avatar} alt={request.teacher.name} className="object-cover" />
+                    {request.fromUser.avatar ? (
+                      <AvatarImage src={request.fromUser.avatar} alt={request.fromUser.name} className="object-cover" />
                     ) : null}
-                    <AvatarFallback className={`${getAvatarColor(request.teacher.id)} text-white font-semibold text-xs`}>
-                      {request.teacher.name.charAt(0).toUpperCase()}
+                    <AvatarFallback className={`${getAvatarColor(request.fromUser.id)} text-white font-semibold text-xs`}>
+                      {request.fromUser.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{request.teacher.name}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{request.fromUser.name}</p>
                   </div>
                   <div className="flex gap-1.5 flex-shrink-0">
                     <AntButton
                       type="primary"
                       size="small"
+                      onClick={() => handleAccept(request.id)}
+                      loading={loadingRequests.has(request.id)}
+                      disabled={loadingRequests.has(request.id)}
                       className="flex items-center justify-center min-w-[28px] !h-7 !bg-green-600 !text-white hover:!bg-green-700"
                     >
                       ✓
                     </AntButton>
                     <AntButton
                       size="small"
+                      onClick={() => handleReject(request.id)}
+                      loading={loadingRequests.has(request.id)}
+                      disabled={loadingRequests.has(request.id)}
                       className="flex items-center justify-center min-w-[28px] !h-7 border-green-300 text-green-700 hover:!bg-green-50 hover:border-green-400"
                     >
                       ✕

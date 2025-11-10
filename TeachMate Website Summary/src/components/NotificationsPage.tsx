@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Notification, Teacher } from '../types';
 import { translations, Language } from '../translations';
 import { 
@@ -23,31 +23,116 @@ import {
   DeleteOutlined,
   LeftOutlined
 } from '@ant-design/icons';
+import { getNoti, markNotiAsRead, markAllNotiAsRead } from '../apis/noti.api';
+import { toast } from 'sonner';
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
 
 interface NotificationsPageProps {
-  notifications: Notification[];
-  teachers: Teacher[];
   language: Language;
-  onMarkAsRead: (notificationId: string) => void;
-  onMarkAllAsRead: () => void;
-  onDeleteNotification: (notificationId: string) => void;
   onBack: () => void;
 }
 
 export function NotificationsPage({
-  notifications,
-  teachers,
   language,
-  onMarkAsRead,
-  onMarkAllAsRead,
-  onDeleteNotification,
   onBack
 }: NotificationsPageProps) {
   const t = translations[language];
   const [activeTab, setActiveTab] = useState('all');
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch notifications from API
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      setIsLoading(true);
+      try {
+        const response = await getNoti();
+        
+        if (response.success) {
+          // Map API data to Notification interface
+          const mappedNotifications: Notification[] = response.data.map(noti => ({
+            id: noti._id,
+            type: noti.type as Notification['type'],
+            title: noti.title,
+            message: noti.body,
+            isRead: noti.read,
+            createdAt: new Date(noti.createdAt),
+            fromUserId: noti.refId
+          }));
+          
+          setNotifications(mappedNotifications);
+        }
+      } catch (error) {
+        console.error('Failed to fetch notifications:', error);
+        setNotifications([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      const response = await markNotiAsRead(notificationId);
+      
+      if (response.success) {
+        setNotifications(prev =>
+          prev.map(notif =>
+            notif.id === notificationId ? { ...notif, isRead: true } : notif
+          )
+        );
+        toast.success(
+          language === 'ja' 
+            ? '通知を既読にしました' 
+            : 'Đã đánh dấu thông báo là đã đọc'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      toast.error(
+        language === 'ja' 
+          ? '既読マークに失敗しました' 
+          : 'Không thể đánh dấu đã đọc'
+      );
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const response = await markAllNotiAsRead();
+      
+      if (response.success) {
+        setNotifications(prev =>
+          prev.map(notif => ({ ...notif, isRead: true }))
+        );
+        toast.success(
+          language === 'ja' 
+            ? 'すべての通知を既読にしました' 
+            : 'Đã đánh dấu tất cả thông báo là đã đọc'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      toast.error(
+        language === 'ja' 
+          ? 'すべて既読マークに失敗しました' 
+          : 'Không thể đánh dấu tất cả đã đọc'
+      );
+    }
+  };
+
+  const handleDeleteNotification = (notificationId: string) => {
+    setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+    toast.success(
+      language === 'ja' 
+        ? '通知を削除しました' 
+        : 'Đã xóa thông báo'
+    );
+  };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -105,10 +190,6 @@ export function NotificationsPage({
     return labels[type] || '';
   };
 
-  const getTeacherById = (teacherId: string) => {
-    return teachers.find(t => t.id === teacherId);
-  };
-
   const formatTime = (date: Date) => {
     const now = new Date();
     const notifDate = new Date(date);
@@ -155,7 +236,7 @@ export function NotificationsPage({
               <Button 
                 type="primary" 
                 icon={<CheckOutlined />}
-                onClick={onMarkAllAsRead}
+                onClick={handleMarkAllAsRead}
               >
                 {language === 'ja' ? 'すべて既読' : 'Đánh dấu tất cả đã đọc'}
               </Button>
@@ -199,7 +280,14 @@ export function NotificationsPage({
 
         {/* Notifications List */}
         <div className="bg-white rounded-lg shadow-sm">
-          {filteredNotifications.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <Space direction="vertical" align="center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <Text type="secondary">{language === 'ja' ? '読み込み中...' : 'Đang tải...'}</Text>
+              </Space>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={
@@ -213,80 +301,68 @@ export function NotificationsPage({
             <List
               itemLayout="horizontal"
               dataSource={filteredNotifications}
-              renderItem={(notification) => {
-                const teacher = notification.fromUserId 
-                  ? getTeacherById(notification.fromUserId) 
-                  : null;
-
-                return (
-                  <List.Item
-                    style={{
-                      backgroundColor: notification.isRead ? '#fff' : '#f0f5ff',
-                      padding: '16px 24px',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}
-                    actions={[
-                      !notification.isRead && (
-                        <Tooltip title={language === 'ja' ? '既読' : 'Đánh dấu đã đọc'}>
-                          <Button 
-                            type="text"
-                            icon={<CheckOutlined />}
-                            onClick={() => onMarkAsRead(notification.id)}
-                            style={{ color: '#1890ff' }}
-                          />
-                        </Tooltip>
-                      ),
-                      <Tooltip title={language === 'ja' ? '削除' : 'Xóa'}>
+              renderItem={(notification) => (
+                <List.Item
+                  style={{
+                    backgroundColor: notification.isRead ? '#fff' : '#f0f5ff',
+                    padding: '16px 24px',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}
+                  actions={[
+                    !notification.isRead && (
+                      <Tooltip title={language === 'ja' ? '既読' : 'Đánh dấu đã đọc'}>
                         <Button 
                           type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => onDeleteNotification(notification.id)}
+                          icon={<CheckOutlined />}
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          style={{ color: '#1890ff' }}
                         />
                       </Tooltip>
-                    ].filter(Boolean)}
-                  >
-                    <List.Item.Meta
-                      avatar={
-                        teacher ? (
-                          <Avatar size={48} src={teacher.avatar}>
-                            {teacher.name.charAt(0)}
-                          </Avatar>
-                        ) : (
-                          <Avatar 
-                            size={48} 
-                            style={{ backgroundColor: '#f0f0f0' }}
-                            icon={getNotificationIcon(notification.type)}
-                          />
-                        )
-                      }
-                      title={
-                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                          <Space>
-                            <Text strong style={{ fontSize: '15px' }}>
-                              {notification.title}
-                            </Text>
-                            {!notification.isRead && (
-                              <Badge status="processing" />
-                            )}
-                          </Space>
-                          <Tag color={getNotificationColor(notification.type)}>
-                            {getTypeLabel(notification.type)}
-                          </Tag>
-                        </Space>
-                      }
-                      description={
-                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                          <Text>{notification.message}</Text>
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {formatTime(notification.createdAt)}
+                    ),
+                    <Tooltip title={language === 'ja' ? '削除' : 'Xóa'}>
+                      <Button 
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDeleteNotification(notification.id)}
+                      />
+                    </Tooltip>
+                  ].filter(Boolean)}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      <Avatar 
+                        size={48} 
+                        style={{ backgroundColor: '#f0f0f0' }}
+                        icon={getNotificationIcon(notification.type)}
+                      />
+                    }
+                    title={
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Space>
+                          <Text strong style={{ fontSize: '15px' }}>
+                            {notification.title}
                           </Text>
+                          {!notification.isRead && (
+                            <Badge status="processing" />
+                          )}
                         </Space>
-                      }
-                    />
-                  </List.Item>
-                );
-              }}
+                        <Tag color={getNotificationColor(notification.type)}>
+                          {getTypeLabel(notification.type)}
+                        </Tag>
+                      </Space>
+                    }
+                    description={
+                      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                        <Text>{notification.message}</Text>
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          {formatTime(notification.createdAt)}
+                        </Text>
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
             />
           )}
         </div>
