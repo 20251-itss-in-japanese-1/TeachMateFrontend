@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
+import { Badge as AntBadge } from 'antd';
 import { translations, Language } from '../translations';
 import { Teacher } from '../types';
 
@@ -19,16 +20,46 @@ const getAvatarColor = (id: string) => {
   return colors[index];
 };
 
+interface FriendRequest {
+  id: string;
+  fromUser: Teacher;
+  status: string;
+  createdAt: string;
+}
+
+interface Thread {
+  id: string;
+  type: 'direct_friend' | 'direct_stranger' | 'group';
+  name?: string;
+  avatar?: string;
+  otherUser?: Teacher;
+  lastMessage?: {
+    id: string;
+    senderId: string;
+    senderName: string;
+    content: string;
+    contentType: string;
+  };
+  members: any[];
+  unreadCount: number;
+  isLastMessageRead: boolean;
+}
+
 interface SecondarySidebarProps {
   view: 'chat' | 'contacts';
   language: Language;
   friends: Teacher[];
-  groups: Array<{ id: string; name: string; memberCount: number; avatar: string }>;
-  friendRequests: Array<{ id: string; teacher: Teacher }>;
+  groups: Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
+  friendRequests: FriendRequest[];
+  threads?: Thread[];
+  isLoadingThreads?: boolean;
   onSelectChat: (teacher: Teacher) => void;
-  onSelectGroup: (group: { id: string; name: string; memberCount: number; avatar: string }) => void;
+  onSelectGroup: (group: any) => void;
+  onSelectThread?: (thread: Thread) => void;
   onAddFriend: () => void;
   onCreateGroup: () => void;
+  onAcceptFriendRequest: (requestId: string) => void;
+  onRejectFriendRequest: (requestId: string) => void;
 }
 
 export function SecondarySidebar({
@@ -37,19 +68,53 @@ export function SecondarySidebar({
   friends,
   groups,
   friendRequests,
+  threads = [],
+  isLoadingThreads = false,
   onSelectChat,
   onSelectGroup,
+  onSelectThread,
   onAddFriend,
-  onCreateGroup
+  onCreateGroup,
+  onAcceptFriendRequest,
+  onRejectFriendRequest
 }: SecondarySidebarProps) {
   const t = translations[language];
   const [searchQuery, setSearchQuery] = useState('');
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
+  const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
+
+  const handleAccept = async (requestId: string) => {
+    setLoadingRequests(prev => new Set(prev).add(requestId));
+    await onAcceptFriendRequest(requestId);
+    setLoadingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(requestId);
+      return newSet;
+    });
+  };
+
+  const handleReject = async (requestId: string) => {
+    setLoadingRequests(prev => new Set(prev).add(requestId));
+    await onRejectFriendRequest(requestId);
+    setLoadingRequests(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(requestId);
+      return newSet;
+    });
+  };
 
   const filteredFriends = friends.filter(friend =>
     friend.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     friend.specialties.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const filteredThreads = threads.filter(thread => {
+    const name = thread.name || '';
+    const lastMessageContent = thread.lastMessage?.content || '';
+    return searchQuery === '' ||
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lastMessageContent.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   if (view === 'chat') {
     return (
@@ -117,62 +182,73 @@ export function SecondarySidebar({
           </div>
         </div>
 
-        {/* Friends & Groups List */}
+        {/* Threads List */}
         <ScrollArea className="flex-1">
           <div className="p-2">
-            {filteredFriends.length === 0 ? (
+            {isLoadingThreads ? (
               <div className="text-center py-8 text-gray-500">
-                <p>{t.noFriends}</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-sm">{language === 'ja' ? '読み込み中...' : 'Đang tải...'}</p>
+              </div>
+            ) : filteredThreads.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>{t.noConversations}</p>
               </div>
             ) : (
-              filteredFriends.map((friend) => (
+              filteredThreads.map((thread) => (
                 <button
-                  key={friend.id}
-                  onClick={() => onSelectChat(friend)}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border border-transparent hover:border-blue-200"
+                  key={thread.id}
+                  onClick={() => onSelectThread && onSelectThread(thread)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border ${
+                    thread.unreadCount > 0 
+                      ? 'border-blue-300 bg-blue-50/50' 
+                      : 'border-transparent hover:border-blue-200'
+                  }`}
                 >
-                  <Avatar className="w-10 h-10 border-2 border-blue-100 flex-shrink-0">
-                    {friend.avatar ? (
-                      <AvatarImage src={friend.avatar} alt={friend.name} className="object-cover" />
-                    ) : null}
-                    <AvatarFallback className={`${getAvatarColor(friend.id)} text-white font-semibold`}>
-                      {friend.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{friend.name}</p>
-                    <p className="text-sm text-blue-600 truncate">
-                      {friend.specialties[0]}
-                    </p>
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="w-10 h-10 border-2 border-blue-100">
+                      {thread.avatar ? (
+                        <AvatarImage src={thread.avatar} alt={thread.name || ''} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className={`${thread.type === 'group' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
+                        {thread.type === 'group' ? (
+                          <Hash className="w-5 h-5 text-white" />
+                        ) : (
+                          thread.name?.charAt(0).toUpperCase() || '?'
+                        )}
+                      </AvatarFallback>
+                    </Avatar>
+                    {thread.type === 'direct_friend' && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
+                    )}
                   </div>
-                  <div className="w-2 h-2 bg-green-500 rounded-full shadow-sm flex-shrink-0" />
+                  
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className={`font-semibold text-gray-800 truncate ${thread.unreadCount > 0 ? 'text-blue-700' : ''}`}>
+                        {thread.name}
+                      </p>
+                      {thread.unreadCount > 0 && (
+                        <AntBadge 
+                          count={thread.unreadCount} 
+                          className="ml-2"
+                          style={{ backgroundColor: '#2563eb' }}
+                        />
+                      )}
+                    </div>
+                    {thread.lastMessage && (
+                      <p className={`text-sm truncate ${
+                        thread.unreadCount > 0 
+                          ? 'text-blue-700 font-medium' 
+                          : 'text-gray-600'
+                      }`}>
+                        {thread.lastMessage.senderName}: {thread.lastMessage.content}
+                      </p>
+                    )}
+                  </div>
                 </button>
               ))
             )}
-
-            {groups.map((group) => (
-              <button
-                key={group.id}
-                onClick={() => onSelectGroup(group)}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border border-transparent hover:border-blue-200"
-              >
-                <Avatar className="w-10 h-10 border-2 border-blue-100 flex-shrink-0">
-                  {group.avatar ? (
-                    <AvatarImage src={group.avatar} alt={group.name} className="object-cover" />
-                  ) : (
-                    <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600">
-                      <Hash className="w-5 h-5 text-white" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold text-gray-800">{group.name}</p>
-                  <p className="text-sm text-blue-600">
-                    {group.memberCount} members
-                  </p>
-                </div>
-              </button>
-            ))}
           </div>
         </ScrollArea>
       </div>
@@ -230,26 +306,32 @@ export function SecondarySidebar({
                   className="flex items-center gap-2 p-2 rounded-lg bg-green-50/70 border border-green-200 hover:border-green-300 transition-all"
                 >
                   <Avatar className="w-8 h-8 flex-shrink-0 border border-green-200">
-                    {request.teacher.avatar ? (
-                      <AvatarImage src={request.teacher.avatar} alt={request.teacher.name} className="object-cover" />
+                    {request.fromUser.avatar ? (
+                      <AvatarImage src={request.fromUser.avatar} alt={request.fromUser.name} className="object-cover" />
                     ) : null}
-                    <AvatarFallback className={`${getAvatarColor(request.teacher.id)} text-white font-semibold text-xs`}>
-                      {request.teacher.name.charAt(0).toUpperCase()}
+                    <AvatarFallback className={`${getAvatarColor(request.fromUser.id)} text-white font-semibold text-xs`}>
+                      {request.fromUser.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{request.teacher.name}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{request.fromUser.name}</p>
                   </div>
                   <div className="flex gap-1.5 flex-shrink-0">
                     <AntButton
                       type="primary"
                       size="small"
+                      onClick={() => handleAccept(request.id)}
+                      loading={loadingRequests.has(request.id)}
+                      disabled={loadingRequests.has(request.id)}
                       className="flex items-center justify-center min-w-[28px] !h-7 !bg-green-600 !text-white hover:!bg-green-700"
                     >
                       ✓
                     </AntButton>
                     <AntButton
                       size="small"
+                      onClick={() => handleReject(request.id)}
+                      loading={loadingRequests.has(request.id)}
+                      disabled={loadingRequests.has(request.id)}
                       className="flex items-center justify-center min-w-[28px] !h-7 border-green-300 text-green-700 hover:!bg-green-50 hover:border-green-400"
                     >
                       ✕

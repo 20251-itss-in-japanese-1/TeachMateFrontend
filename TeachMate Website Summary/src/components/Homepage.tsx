@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Teacher, ExchangeSession, Appointment } from '../types';
 import { translations, Language } from '../translations';
 import { 
@@ -29,13 +29,14 @@ import {
   ClockCircleOutlined,
   EyeOutlined
 } from '@ant-design/icons';
+import { friendSuggest } from '../apis/friend.api';
+import { mapUserToTeacher } from '../utils/mappers';
 
 const { Title, Text, Paragraph } = Typography;
 
 interface HomepageProps {
   user: Teacher;
   language: Language;
-  teachers: Teacher[];
   groups: Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
   exchangeSessions: ExchangeSession[];
   appointments: Appointment[];
@@ -59,7 +60,6 @@ const getAvatarColor = (id: string) => {
 export function Homepage({
   user,
   language,
-  teachers,
   groups,
   exchangeSessions,
   appointments,
@@ -81,23 +81,52 @@ export function Homepage({
   const [experienceRange, setExperienceRange] = useState<[number, number]>([0, 20]);
   const [showFilters, setShowFilters] = useState(false);
   
-  // Pagination states
+
   const [teacherPage, setTeacherPage] = useState(1);
   const [groupPage, setGroupPage] = useState(1);
   const itemsPerPage = 6;
 
+  // API data states
+  const [suggestedTeachers, setSuggestedTeachers] = useState<Teacher[]>([]);
+  const [isLoadingTeachers, setIsLoadingTeachers] = useState(true);
+  const [totalTeachers, setTotalTeachers] = useState(0);
+
+  // Fetch friend suggestions from API
+  useEffect(() => {
+    const fetchFriendSuggestions = async () => {
+      setIsLoadingTeachers(true);
+      try {
+        const response = await friendSuggest(teacherPage, itemsPerPage);
+        
+        if (response.success) {
+          const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
+          setSuggestedTeachers(mappedTeachers);
+          setTotalTeachers(response.meta.total);
+        }
+      } catch (error) {
+        console.error('Failed to fetch friend suggestions:', error);
+        setSuggestedTeachers([]);
+        setTotalTeachers(0);
+      } finally {
+        setIsLoadingTeachers(false);
+      }
+    };
+
+    fetchFriendSuggestions();
+  }, [teacherPage, itemsPerPage]);
+
   // Get all unique specialties for filter
   const allSpecialties = useMemo(() => {
     const specialties = new Set<string>();
-    teachers.forEach(teacher => {
+    suggestedTeachers.forEach(teacher => {
       teacher.specialties.forEach(specialty => specialties.add(specialty));
     });
     return Array.from(specialties).sort();
-  }, [teachers]);
+  }, [suggestedTeachers]);
 
   // Filter teachers based on search and filters
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(teacher => {
+    return suggestedTeachers.filter(teacher => {
       const matchesSearch = searchQuery === '' || 
         teacher.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         teacher.specialties.some(specialty => 
@@ -115,9 +144,8 @@ export function Homepage({
 
       return matchesSearch && matchesSpecialty && matchesNationality && matchesExperience;
     });
-  }, [teachers, searchQuery, selectedSpecialty, selectedNationality, experienceRange]);
+  }, [suggestedTeachers, searchQuery, selectedSpecialty, selectedNationality, experienceRange]);
 
-  // Filter groups based on search
   const filteredGroups = useMemo(() => {
     return groups.filter(group => 
       searchQuery === '' || 
@@ -251,13 +279,11 @@ export function Homepage({
             
             <Row gutter={[16, 16]}>
               {appointments.slice(0, 3).map((appointment) => {
-                const teacher1 = teachers.find(t => t.id === appointment.teacher1Id);
-                const teacher2 = teachers.find(t => t.id === appointment.teacher2Id);
                 const appointmentDate = new Date(appointment.date);
                 
                 return (
                   <Col xs={24} md={12} lg={8} key={appointment.id}>
-                  <Card
+                    <Card
                       className="border-2 border-green-200 hover:shadow-lg transition-all hover:border-green-400 cursor-pointer"
                       hoverable
                     >
@@ -265,7 +291,7 @@ export function Homepage({
                         <Space>
                           <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
                             <ClockCircleOutlined className="text-white text-lg" />
-                      </div>
+                          </div>
                           <div>
                             <AntBadge status="success" text={language === 'ja' ? '予定' : 'Đã đặt'} />
                             <div className="text-sm text-gray-600">
@@ -274,8 +300,8 @@ export function Homepage({
                                 month: 'short',
                                 day: 'numeric'
                               })} {appointment.time}
-                      </div>
-                    </div>
+                            </div>
+                          </div>
                         </Space>
 
                         <Title level={5} className="mb-0" ellipsis={{ rows: 2 }}>
@@ -285,26 +311,8 @@ export function Homepage({
                         <Paragraph ellipsis={{ rows: 2 }} className="text-sm text-gray-600 mb-0">
                           {appointment.description}
                         </Paragraph>
-
-                        <Space>
-                          <AntAvatar.Group>
-                        {teacher1 && (
-                              <AntAvatar src={teacher1.avatar} style={{ backgroundColor: getAvatarColor(teacher1.id) }}>
-                                {teacher1.name.charAt(0).toUpperCase()}
-                              </AntAvatar>
-                        )}
-                        {teacher2 && (
-                              <AntAvatar src={teacher2.avatar} style={{ backgroundColor: getAvatarColor(teacher2.id) }}>
-                                {teacher2.name.charAt(0).toUpperCase()}
-                              </AntAvatar>
-                            )}
-                          </AntAvatar.Group>
-                          <Text className="text-xs text-gray-600">
-                        {teacher1?.name} {t.with} {teacher2?.name}
-                          </Text>
-                        </Space>
                       </Space>
-                  </Card>
+                    </Card>
                   </Col>
                 );
               })}
@@ -321,7 +329,14 @@ export function Homepage({
             </AntButton>
           </div>
           
-          {filteredTeachers.length === 0 ? (
+          {isLoadingTeachers ? (
+            <div className="flex justify-center items-center py-20">
+              <Space direction="vertical" align="center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <Text type="secondary">{language === 'ja' ? '読み込み中...' : 'Đang tải...'}</Text>
+              </Space>
+            </div>
+          ) : filteredTeachers.length === 0 ? (
             <Empty
               description={
                 <Space direction="vertical">
@@ -336,7 +351,7 @@ export function Homepage({
           ) : (
             <>
               <Row gutter={[16, 16]}>
-                {paginatedTeachers.map((teacher) => (
+                {filteredTeachers.map((teacher) => (
                   <Col xs={24} md={12} lg={8} key={teacher.id}>
                     <Card className="border-2 hover:shadow-lg transition-shadow" hoverable>
                       <Space direction="vertical" size="middle" className="w-full">
@@ -348,62 +363,63 @@ export function Homepage({
                           >
                             {teacher.name.charAt(0).toUpperCase()}
                           </AntAvatar>
-                    <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0">
                             <Title level={5} ellipsis className="mb-1">{teacher.name}</Title>
                             <Tag color="blue">{teacher.nationality}</Tag>
                             <Text className="text-sm text-gray-600 block">
-                        {teacher.experience} {t.yearsExperience}
+                              {teacher.experience} {t.yearsExperience}
                             </Text>
-                    </div>
+                          </div>
                         </Space>
 
                         <div>
                           <Text type="secondary" className="text-sm block mb-2">{t.specialties}:</Text>
                           <Space wrap>
-                      {teacher.specialties.slice(0, 3).map((specialty, idx) => (
+                            {teacher.specialties.slice(0, 3).map((specialty, idx) => (
                               <Tag key={idx}>{specialty}</Tag>
-                      ))}
+                            ))}
                           </Space>
-                  </div>
+                        </div>
 
                         <Paragraph ellipsis={{ rows: 2 }} className="text-sm mb-0">
-                    {teacher.bio}
+                          {teacher.bio}
                         </Paragraph>
 
                         <Space.Compact block>
                           <AntButton 
                             icon={<EyeOutlined />}
-                      onClick={() => onViewTeacherProfile(teacher)}
+                            onClick={() => onViewTeacherProfile(teacher)}
                             style={{ width: '50%' }}
-                    >
-                      {t.viewProfile}
+                          >
+                            {t.viewProfile}
                           </AntButton>
                           <AntButton 
                             type="primary"
                             icon={<UserAddOutlined />}
-                      onClick={() => onSendFriendRequest(teacher)}
+                            onClick={() => onSendFriendRequest(teacher)}
                             style={{ width: '50%' }}
-                    >
-                      {t.sendFriendRequest}
+                            loading={false}
+                          >
+                            {t.sendFriendRequest}
                           </AntButton>
                         </Space.Compact>
                       </Space>
-                </Card>
+                    </Card>
                   </Col>
                 ))}
               </Row>
               
               {/* Pagination for Teachers */}
-              {filteredTeachers.length > itemsPerPage && (
+              {totalTeachers > itemsPerPage && (
                 <div className="flex justify-center mt-6">
                   <Pagination
                     current={teacherPage}
-                    total={filteredTeachers.length}
+                    total={totalTeachers}
                     pageSize={itemsPerPage}
                     onChange={setTeacherPage}
                     showSizeChanger={false}
                   />
-            </div>
+                </div>
               )}
             </>
           )}
