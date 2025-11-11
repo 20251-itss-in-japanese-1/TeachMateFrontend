@@ -139,10 +139,10 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
     if (provider === 'google') {
       // Redirect to backend Google OAuth endpoint
-      window.location.href = 'http://localhost:3000/api/v1/auth/google';
+      window.location.href = 'https://teach-mate-backend.vercel.app/api/v1/auth/google';
     } else if (provider === 'facebook') {
       // Redirect to backend Facebook OAuth endpoint
-      window.location.href = 'http://localhost:3000/api/v1/auth/facebook';
+      window.location.href = 'https://teach-mate-backend.vercel.app/api/v1/auth/facebook';
     }
   };
 
