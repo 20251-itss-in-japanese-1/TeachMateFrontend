@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { TeacherCard } from './TeacherCard';
 import { friendSuggest } from '../apis/friend.api';
+import { mapUserToTeacher } from '../utils/mappers';
 
 const { Text, Title } = Typography;
 
@@ -63,18 +64,7 @@ export function AllTeachers({
         const response = await friendSuggest(currentPage, itemsPerPage);
 
         if (response.success) {
-          const mappedTeachers: Teacher[] = response.data.map(user => ({
-            id: user._id,
-            name: user.name,
-            nationality: user.nationality,
-            avatar: user.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-            specialties: user.specialties_major,
-            experience: user.yearsExperience || user.experience,
-            interests: user.specialties_interest,
-            bio: user.introduction || user.bio,
-            subjects: user.specialties_subject
-          }));
-
+          const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
           setSuggestedTeachers(mappedTeachers);
           setTotalTeachers(response.meta.total);
         }

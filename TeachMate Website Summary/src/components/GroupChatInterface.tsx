@@ -43,8 +43,10 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ScrollArea } from './ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
+import { sendMessage } from '../apis/chat.api';
 
 const { TextArea } = AntInput;
 const { Text, Title, Paragraph } = Typography;
@@ -87,7 +89,12 @@ interface SharedMedia {
 
 interface GroupChatInterfaceProps {
   currentUser: Teacher;
-  selectedGroup: Group;
+  selectedGroup: any;
+  threadDetail?: {
+    thread: any;
+    messages: any[];
+  } | null;
+  isLoadingMessages?: boolean;
   onBack: () => void;
   language: Language;
 }
@@ -109,10 +116,13 @@ const getAvatarColor = (id: string) => {
 export function GroupChatInterface({
   currentUser,
   selectedGroup,
+  threadDetail,
+  isLoadingMessages = false,
   onBack,
   language
 }: GroupChatInterfaceProps) {
   const t = translations[language];
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [infoDrawerVisible, setInfoDrawerVisible] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [tempGroupName, setTempGroupName] = useState(selectedGroup.name);
@@ -170,6 +180,42 @@ export function GroupChatInterface({
     }
   ]);
   const [newMessage, setNewMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || isSending) return;
+    
+    setIsSending(true);
+    try {
+      const messageData = {
+        content: newMessage,
+        threadId: threadDetail?.thread?._id || selectedGroup.id
+      };
+
+      const response = await sendMessage(messageData);
+      
+      if (response.success) {
+        setNewMessage('');
+        toast.success(
+          language === 'ja' 
+            ? 'メッセージを送信しました' 
+            : 'Đã gửi tin nhắn'
+        );
+        
+        // The useChat hook will automatically refetch
+      }
+    } catch (error: any) {
+      console.error('Failed to send message:', error);
+      toast.error(
+        language === 'ja'
+          ? 'メッセージの送信に失敗しました'
+          : 'Gửi tin nhắn thất bại'
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const [showMemberDrawer, setShowMemberDrawer] = useState(false);
   const [addMemberModalVisible, setAddMemberModalVisible] = useState(false);
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
@@ -338,23 +384,6 @@ export function GroupChatInterface({
       subjects: ['Computer Science', 'Technology']
     }
   ];
-
-  const handleSendMessage = () => {
-    if (newMessage.trim()) {
-      const message: GroupMessage = {
-        id: Date.now().toString(),
-        senderId: currentUser.id,
-        receiverId: selectedGroup.id,
-        content: newMessage,
-        senderName: currentUser.name,
-        senderAvatar: currentUser.avatar,
-        timestamp: new Date(),
-        type: 'text'
-      };
-      setMessages([...messages, message]);
-      setNewMessage('');
-    }
-  };
 
   const handleUploadFile = () => {
     const fileMessage: GroupMessage = {
@@ -544,7 +573,7 @@ export function GroupChatInterface({
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white">
+    <div className="h-full flex flex-col bg-white">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white p-4 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-3 flex-1">
@@ -580,54 +609,115 @@ export function GroupChatInterface({
       </div>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4 bg-gray-50">
-        <div className="space-y-4 max-w-4xl mx-auto">
-          {messages.map((message) => {
-            const isCurrentUser = message.senderId === currentUser.id;
+      <ScrollArea className="flex-1 p-4">
+        {isLoadingMessages ? (
+          <div className="flex justify-center items-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">
+                {language === 'ja' ? '読み込み中...' : 'Đang tải...'}
+              </p>
+            </div>
+          </div>
+        ) : threadDetail && threadDetail.messages.length > 0 ? (
+          <div className="space-y-3">
+            {threadDetail.messages.map((message, index) => {
+              const isOwnMessage = message.senderId._id === currentUser.id;
+              const showAvatar = index === 0 || 
+                threadDetail.messages[index - 1].senderId._id !== message.senderId._id;
+              const messageDate = new Date(message.createdAt);
 
-            return (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${isCurrentUser ? 'flex-row-reverse' : 'flex-row'}`}
-              >
-                {!isCurrentUser && (
-                  <AntAvatar
-                    size={36}
-                    src={message.senderAvatar}
-                    style={{ backgroundColor: getAvatarColor(message.senderId) }}
-                  >
-                    {message.senderName.charAt(0).toUpperCase()}
-                  </AntAvatar>
-                )}
-
-                <div className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                  {!isCurrentUser && (
-                    <Text strong className="text-xs text-gray-600 mb-1 px-1">
-                      {message.senderName}
-                    </Text>
+              return (
+                <div
+                  key={message._id}
+                  className={`flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                >
+                  {/* Avatar for other users (left side) */}
+                  {!isOwnMessage && (
+                    <div className="w-8 h-8 flex-shrink-0">
+                      {showAvatar ? (
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage 
+                            src={message.senderId.avatarUrl} 
+                            alt={message.senderId.name}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-purple-500 text-white text-xs">
+                            {message.senderId.name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </div>
                   )}
-                  <div
-                    className={`rounded-2xl px-4 py-2 ${isCurrentUser
-                        ? 'bg-blue-600 text-white rounded-br-sm'
-                        : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm shadow-sm'
+
+                  {/* Message Bubble */}
+                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[65%]`}>
+                    {/* Sender name for group - only show for others */}
+                    {!isOwnMessage && showAvatar && (
+                      <Text className="text-xs text-gray-500 mb-1 px-3">
+                        {message.senderId.name}
+                      </Text>
+                    )}
+
+                    <div
+                      className={`px-4 py-2.5 shadow-sm ${
+                        isOwnMessage
+                          ? 'bg-blue-600 text-white rounded-[20px] rounded-tr-md'
+                          : 'bg-gray-200 text-gray-900 rounded-[20px] rounded-tl-md'
                       }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                    >
+                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                        {message.content}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 mt-1 px-2">
+                      <Text className="text-xs text-gray-400">
+                        {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </Text>
+                    </div>
                   </div>
-                  <Text className="text-xs text-gray-400 mt-1 px-1">
-                    {message.timestamp.toLocaleTimeString('ja-JP', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </Text>
+
+                  {/* Avatar for own message (right side) */}
+                  {isOwnMessage && (
+                    <div className="w-8 h-8 flex-shrink-0">
+                      {showAvatar ? (
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage 
+                            src={currentUser.avatar} 
+                            alt={currentUser.name}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-blue-600 text-white text-xs">
+                            {currentUser.name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <TeamOutlined className="text-5xl mx-auto mb-4 opacity-50" />
+              <p>{language === 'ja' ? 'メッセージがありません' : 'Chưa có tin nhắn nào'}</p>
+            </div>
+          </div>
+        )}
       </ScrollArea>
 
-      {/* Input Area */}
+      {/* Message Input */}
       <div className="p-4 bg-white border-t border-gray-200">
         <div className="flex gap-2 items-end max-w-4xl mx-auto">
           <div className="flex gap-2">
@@ -673,13 +763,15 @@ export function GroupChatInterface({
             placeholder={language === 'ja' ? 'メッセージを入力...' : 'Nhập tin nhắn...'}
             autoSize={{ minRows: 1, maxRows: 4 }}
             className="flex-1 border-blue-300 focus:border-blue-500"
+            disabled={isSending}
           />
 
           <AntButton
             type="primary"
             icon={<SendOutlined />}
             onClick={handleSendMessage}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || isSending}
+            loading={isSending}
             className="bg-blue-600 hover:bg-blue-700"
           >
             {language === 'ja' ? '送信' : 'Gửi'}
