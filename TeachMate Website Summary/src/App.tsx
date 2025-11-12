@@ -173,27 +173,26 @@ export default function App() {
     fetchFriendList();
   }, [isAuthenticated, isAdmin]);
 
-  // Fetch threads when authenticated
-  useEffect(() => {
-    const fetchThreads = async () => {
-      if (!isAuthenticated || isAdmin) return;
+  // Fetch threads function
+  const fetchThreads = async () => {
+    if (!isAuthenticated || isAdmin) return;
+    
+    setIsLoadingThreads(true);
+    try {
+      const response = await getThreads();
       
-      setIsLoadingThreads(true);
-      try {
-        const response = await getThreads();
-        
-        if (response.success) {
-          const mappedThreads = mapThreadData(response.data, currentUser?.id);
-          setThreads(mappedThreads);
-        }
-      } catch (error) {
-        console.error('Failed to fetch threads:', error);
-        setThreads([]);
-      } finally {
-        setIsLoadingThreads(false);
+      if (response.success) {
+        const mappedThreads = mapThreadData(response.data, currentUser?.id);
+        setThreads(mappedThreads);
       }
-    };
-
+    } catch (error) {
+      console.error('Failed to fetch threads:', error);
+      setThreads([]);
+    } finally {
+      setIsLoadingThreads(false);
+    }
+  };
+  useEffect(() => {
     fetchThreads();
   }, [isAuthenticated, isAdmin, currentUser?.id]);
 
@@ -671,9 +670,12 @@ export default function App() {
       <CreateGroupModal
         open={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
-        teachers={[]}
-        onCreateGroup={(name, memberIds) => {
-          toast.success(language === 'ja' ? `${name}を作成しました` : `Đã tạo nhóm ${name}`);
+        teachers={friends}
+        onGroupCreated={() => {
+          // Refetch threads list after creating group
+          fetchThreads();
+          // Switch to chat view to see the new group
+          setActiveView('chat');
         }}
         language={language}
       />
