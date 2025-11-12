@@ -23,6 +23,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { getUserProfile } from './apis/user.api';
 import { sendFriendRequest, getFriendRequest, acceptFriendRequest, rejectFriendRequest, getFriendList } from './apis/friend.api';
 import { getThreads} from './apis/thread.api';
+import { getNoti } from './apis/noti.api';
 import { mapUserToTeacher, mapFriendListData, mapFriendRequestData, mapThreadData } from './utils/mappers';
 import { useChat } from './hooks/useChat';
 import 'antd/dist/reset.css';
@@ -85,6 +86,7 @@ export default function App() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   // Use chat hook for caching messages
   const { data: threadDetailData, isLoading: isLoadingThreadDetail, refetch: refetchThreadDetail } = useChat(selectedThreadId);
@@ -195,6 +197,32 @@ export default function App() {
   useEffect(() => {
     fetchThreads();
   }, [isAuthenticated, isAdmin, currentUser?.id]);
+
+  // Poll notifications for near-realtime updates
+  useEffect(() => {
+    if (!isAuthenticated || isAdmin) return;
+
+    let active = true;
+    const fetchNoti = async () => {
+      try {
+        const res = await getNoti();
+        if (active && res.success) {
+          const unread = (res.data || []).filter((n) => !n.read).length;
+          setUnreadNotificationsCount(unread);
+        }
+      } catch (e) {
+        // ignore transient errors
+      }
+    };
+
+    // initial and interval
+    fetchNoti();
+    const interval = setInterval(fetchNoti, 4000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, isAdmin]);
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'ja' ? 'vi' : 'ja');
@@ -481,7 +509,7 @@ export default function App() {
           onEditProfile={() => setIsEditingProfile(true)}
           onLogout={handleLogout}
           onViewNotifications={() => setActiveView('notifications')}
-          unreadNotificationsCount={0}
+          unreadNotificationsCount={unreadNotificationsCount}
           language={language}
         />
 
@@ -583,6 +611,11 @@ export default function App() {
                 isFriend={friends.some(friend => friend.id === chatTeacher.id)}
                 onSendFriendRequest={handleSendFriendRequest}
                 language={language}
+                onThreadCreated={(threadId) => {
+                  setSelectedThreadId(threadId);
+                  // Refresh threads to include the new thread
+                  fetchThreads();
+                }}
               />
             )}
 

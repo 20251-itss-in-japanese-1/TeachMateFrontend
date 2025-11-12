@@ -45,13 +45,13 @@ export function NotificationsPage({
 
   // Fetch notifications from API
   useEffect(() => {
+    let active = true;
+
     const fetchNotifications = async () => {
       setIsLoading(true);
       try {
         const response = await getNoti();
-        
         if (response.success) {
-          // Map API data to Notification interface
           const mappedNotifications: Notification[] = response.data.map(noti => ({
             id: noti._id,
             type: noti.type as Notification['type'],
@@ -61,18 +61,22 @@ export function NotificationsPage({
             createdAt: new Date(noti.createdAt),
             fromUserId: noti.refId
           }));
-          
-          setNotifications(mappedNotifications);
+          if (active) setNotifications(mappedNotifications);
         }
       } catch (error) {
         console.error('Failed to fetch notifications:', error);
-        setNotifications([]);
+        if (active) setNotifications([]);
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
     };
 
     fetchNotifications();
+    const interval = setInterval(fetchNotifications, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleMarkAsRead = async (notificationId: string) => {
