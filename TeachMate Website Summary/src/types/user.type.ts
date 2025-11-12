@@ -73,3 +73,14 @@ export interface SearchUsersResponse {
   message: string;
   data: UserData[];
 }
+
+export interface ReportUserRequest {
+  targetUserId: string;
+  reason: string;
+  targetType: 'user' | 'group';
+}
+
+export interface ReportUserResponse {
+  success: boolean;
+  message: string;
+}

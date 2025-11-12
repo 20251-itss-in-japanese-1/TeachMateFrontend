@@ -43,6 +43,7 @@ import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { CheckCheck, MessageCircle } from 'lucide-react';
 import { sendMessage } from '../apis/chat.api';
+import { reportUser } from '../apis/user.api';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
@@ -234,14 +235,43 @@ export function ChatInterface({
   };
 
   const handleReportConversation = () => {
+    let reason = '';
     Modal.confirm({
       title: language === 'ja' ? '会話を報告' : 'Báo cáo cuộc trò chuyện',
-      content: language === 'ja' ? 'この会話を管理者に報告しますか?' : 'Bạn có chắc chắn muốn báo cáo cuộc trò chuyện này cho quản trị viên?',
+      content: (
+        <div className="mt-2">
+          <Text className="block mb-2 text-gray-600">
+            {language === 'ja' ? '理由を入力してください' : 'Vui lòng nhập lý do báo cáo'}
+          </Text>
+          <TextArea
+            rows={4}
+            placeholder={language === 'ja' ? 'スパム、不適切な内容など' : 'Spam, nội dung không phù hợp, v.v.'}
+            onChange={(e: any) => {
+              reason = e.target.value;
+            }}
+          />
+        </div>
+      ),
       okText: language === 'ja' ? '報告' : 'Báo cáo',
       cancelText: language === 'ja' ? 'キャンセル' : 'Hủy',
       okButtonProps: { danger: true },
-      onOk() {
-        toast.success(language === 'ja' ? '報告を送信しました' : 'Đã gửi báo cáo');
+      onOk: async () => {
+        if (!reason || !reason.trim()) {
+          toast.error(language === 'ja' ? '理由を入力してください' : 'Vui lòng nhập lý do');
+          return Promise.reject();
+        }
+        try {
+          await reportUser({
+            targetUserId: selectedTeacher.id,
+            targetType: 'user',
+            reason: reason.trim()
+          });
+          toast.success(language === 'ja' ? '報告を送信しました' : 'Đã gửi báo cáo');
+        } catch (err) {
+          console.error('Report conversation failed:', err);
+          toast.error(language === 'ja' ? '報告の送信に失敗しました' : 'Gửi báo cáo thất bại');
+          return Promise.reject(err);
+        }
       }
     });
   };
