@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getTokenFromLocalStorage, removeTokenFromLocalStorage } from './localtoken';
 
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:3000/api/v1"
+  baseURL: "https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1"
 });
 
 axiosInstance.interceptors.request.use(

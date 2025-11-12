@@ -22,6 +22,9 @@ import { Toaster } from './components/ui/sonner';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { getUserProfile } from './apis/user.api';
 import { sendFriendRequest, getFriendRequest, acceptFriendRequest, rejectFriendRequest, getFriendList } from './apis/friend.api';
+import { getThreads} from './apis/thread.api';
+import { mapUserToTeacher, mapFriendListData, mapFriendRequestData, mapThreadData } from './utils/mappers';
+import { useChat } from './hooks/useChat';
 import 'antd/dist/reset.css';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
@@ -31,6 +34,35 @@ interface FriendRequest {
   fromUser: Teacher;
   status: string;
   createdAt: string;
+}
+
+interface Thread {
+  id: string;
+  type: 'direct_friend' | 'direct_stranger' | 'group';
+  name?: string;
+  avatar?: string;
+  otherUser?: Teacher;
+  lastMessage?: {
+    id: string;
+    senderId: string;
+    senderName: string;
+    content: string;
+    contentType: string;
+  };
+  members: any[];
+  unreadCount: number;
+  isLastMessageRead: boolean;
+}
+
+interface ThreadDetail {
+  thread: {
+    id: string;
+    name?: string;
+    avatar?: string;
+    type: string;
+    members: any[];
+  };
+  messages: any[];
 }
 
 export default function App() {
@@ -50,6 +82,23 @@ export default function App() {
   const [friends, setFriends] = useState<Teacher[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [isLoadingFriendRequests, setIsLoadingFriendRequests] = useState(false);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(false);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+
+  // Use chat hook for caching messages
+  const { data: threadDetailData, isLoading: isLoadingThreadDetail, refetch: refetchThreadDetail } = useChat(selectedThreadId);
+
+  // Refetch messages periodically (optional - for real-time feel)
+  useEffect(() => {
+    if (!selectedThreadId) return;
+    
+    const interval = setInterval(() => {
+      refetchThreadDetail();
+    }, 5000); // Refetch every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [selectedThreadId, refetchThreadDetail]);
 
   const t = translations[language];
 
@@ -59,31 +108,17 @@ export default function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          // Fetch user profile from API
           const response = await getUserProfile();
           
           if (response.success) {
-            const userData = response.data;
-            const user: Teacher = {
-              id: userData._id,
-              name: userData.name,
-              nationality: userData.nationality,
-              avatar: userData.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-              specialties: userData.specialties_major,
-              experience: userData.yearsExperience || userData.experience,
-              interests: userData.specialties_interest,
-              bio: userData.introduction || userData.bio,
-              subjects: userData.specialties_subject
-            };
+            const user = mapUserToTeacher(response.data);
             setCurrentUser(user);
             setIsAuthenticated(true);
           } else {
-            // Invalid token, remove it
             localStorage.removeItem('token');
           }
         } catch (error) {
           console.error('Failed to fetch user profile:', error);
-          // If token is invalid, remove it
           localStorage.removeItem('token');
         }
       }
@@ -103,24 +138,7 @@ export default function App() {
         const response = await getFriendRequest();
         
         if (response.success) {
-          // Map API data to FriendRequest interface
-          const mappedRequests: FriendRequest[] = response.data.map(request => ({
-            id: request._id,
-            fromUser: {
-              id: request.fromUserId._id,
-              name: request.fromUserId.name,
-              nationality: request.fromUserId.nationality,
-              avatar: request.fromUserId.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-              specialties: request.fromUserId.specialties_major,
-              experience: request.fromUserId.yearsExperience || request.fromUserId.experience,
-              interests: request.fromUserId.specialties_interest,
-              bio: request.fromUserId.introduction || request.fromUserId.bio,
-              subjects: request.fromUserId.specialties_subject
-            },
-            status: request.status,
-            createdAt: request.createdAt
-          }));
-          
+          const mappedRequests = mapFriendRequestData(response.data);
           setFriendRequests(mappedRequests);
         }
       } catch (error) {
@@ -143,19 +161,7 @@ export default function App() {
         const response = await getFriendList();
         
         if (response.success) {
-          // Map API data to Teacher interface
-          const mappedFriends: Teacher[] = response.data.friends.map(friend => ({
-            id: friend._id,
-            name: friend.name,
-            nationality: friend.nationality,
-            avatar: friend.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-            specialties: friend.specialties_major,
-            experience: friend.yearsExperience || friend.experience,
-            interests: friend.specialties_interest,
-            bio: friend.introduction || friend.bio,
-            subjects: friend.specialties_subject
-          }));
-          
+          const mappedFriends = mapFriendListData(response.data.friends);
           setFriends(mappedFriends);
         }
       } catch (error) {
@@ -166,6 +172,30 @@ export default function App() {
 
     fetchFriendList();
   }, [isAuthenticated, isAdmin]);
+
+  // Fetch threads when authenticated
+  useEffect(() => {
+    const fetchThreads = async () => {
+      if (!isAuthenticated || isAdmin) return;
+      
+      setIsLoadingThreads(true);
+      try {
+        const response = await getThreads();
+        
+        if (response.success) {
+          const mappedThreads = mapThreadData(response.data, currentUser?.id);
+          setThreads(mappedThreads);
+        }
+      } catch (error) {
+        console.error('Failed to fetch threads:', error);
+        setThreads([]);
+      } finally {
+        setIsLoadingThreads(false);
+      }
+    };
+
+    fetchThreads();
+  }, [isAuthenticated, isAdmin, currentUser?.id]);
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'ja' ? 'vi' : 'ja');
@@ -179,27 +209,14 @@ export default function App() {
   };
 
   const handleLogin = async (userData: { name: string; email: string; nationality: 'Japanese' | 'Vietnamese' }, token?: string) => {
-    // Only store token in localStorage
     if (token) {
       localStorage.setItem('token', token);
       
       try {
-        // Fetch user profile from API after login
         const response = await getUserProfile();
         
         if (response.success) {
-          const apiUserData = response.data;
-          const newUser: Teacher = {
-            id: apiUserData._id,
-            name: apiUserData.name,
-            nationality: apiUserData.nationality,
-            avatar: apiUserData.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-            specialties: apiUserData.specialties_major,
-            experience: apiUserData.yearsExperience || apiUserData.experience,
-            interests: apiUserData.specialties_interest,
-            bio: apiUserData.introduction || apiUserData.bio,
-            subjects: apiUserData.specialties_subject
-          };
+          const newUser = mapUserToTeacher(response.data);
           setCurrentUser(newUser);
           setIsAuthenticated(true);
         }
@@ -245,6 +262,45 @@ export default function App() {
     setChatGroup(group);
     setChatTeacher(null);
     setActiveView('chat');
+  };
+
+  const handleSelectThread = async (thread: Thread) => {
+    try {
+      // Set the selected thread ID to trigger useChat hook
+      setSelectedThreadId(thread.id);
+
+      // Set chat based on thread type
+      if (thread.type === 'group') {
+        setChatGroup({
+          id: thread.id,
+          name: thread.name,
+          avatar: thread.avatar,
+          members: thread.members
+        });
+        setChatTeacher(null);
+      } else {
+        if (thread.otherUser) {
+          setChatTeacher(thread.otherUser);
+        }
+        setChatGroup(null);
+      }
+      
+      setActiveView('chat');
+
+      // Refresh threads to update unread count in background
+      const threadsResponse = await getThreads();
+      if (threadsResponse.success) {
+        const mappedThreads = mapThreadData(threadsResponse.data, currentUser?.id);
+        setThreads(mappedThreads);
+      }
+    } catch (error) {
+      console.error('Failed to select thread:', error);
+      toast.error(
+        language === 'ja'
+          ? 'メッセージの読み込みに失敗しました'
+          : 'Không thể tải tin nhắn'
+      );
+    }
   };
 
   const handleSendFriendRequest = async (teacher: Teacher) => {
@@ -306,45 +362,19 @@ export default function App() {
             : 'Đã chấp nhận lời mời kết bạn'
         );
         
-        // Remove the accepted request from the list
         setFriendRequests(prev => prev.filter(req => req.id !== requestId));
         
-        // Refetch friend list to update with new friend
+        // Refetch friend list
         const friendListResponse = await getFriendList();
         if (friendListResponse.success) {
-          const mappedFriends: Teacher[] = friendListResponse.data.friends.map(friend => ({
-            id: friend._id,
-            name: friend.name,
-            nationality: friend.nationality,
-            avatar: friend.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-            specialties: friend.specialties_major,
-            experience: friend.yearsExperience || friend.experience,
-            interests: friend.specialties_interest,
-            bio: friend.introduction || friend.bio,
-            subjects: friend.specialties_subject
-          }));
+          const mappedFriends = mapFriendListData(friendListResponse.data.friends);
           setFriends(mappedFriends);
         }
         
-        // Optionally, refetch friend requests to update the list
+        // Refetch friend requests
         const updatedRequests = await getFriendRequest();
         if (updatedRequests.success) {
-          const mappedRequests: FriendRequest[] = updatedRequests.data.map(request => ({
-            id: request._id,
-            fromUser: {
-              id: request.fromUserId._id,
-              name: request.fromUserId.name,
-              nationality: request.fromUserId.nationality,
-              avatar: request.fromUserId.avatarUrl || 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-              specialties: request.fromUserId.specialties_major,
-              experience: request.fromUserId.yearsExperience || request.fromUserId.experience,
-              interests: request.fromUserId.specialties_interest,
-              bio: request.fromUserId.introduction || request.fromUserId.bio,
-              subjects: request.fromUserId.specialties_subject
-            },
-            status: request.status,
-            createdAt: request.createdAt
-          }));
+          const mappedRequests = mapFriendRequestData(updatedRequests.data);
           setFriendRequests(mappedRequests);
         }
       } else {
@@ -464,8 +494,11 @@ export default function App() {
             friends={friends}
             groups={mockGroups}
             friendRequests={friendRequests}
+            threads={threads}
+            isLoadingThreads={isLoadingThreads}
             onSelectChat={handleSelectChat}
             onSelectGroup={handleSelectGroup}
+            onSelectThread={handleSelectThread}
             onAddFriend={handleAddFriend}
             onCreateGroup={handleCreateGroup}
             onAcceptFriendRequest={handleAcceptFriendRequest}
@@ -532,7 +565,21 @@ export default function App() {
               <ChatInterface
                 currentTeacher={currentUser!}
                 selectedTeacher={chatTeacher}
-                onBack={() => setChatTeacher(null)}
+                threadDetail={threadDetailData?.success ? {
+                  thread: {
+                    id: threadDetailData.data.thread._id,
+                    name: threadDetailData.data.thread.name,
+                    avatar: threadDetailData.data.thread.avatar,
+                    type: threadDetailData.data.thread.type,
+                    members: threadDetailData.data.thread.members
+                  },
+                  messages: threadDetailData.data.messages
+                } : null}
+                isLoadingMessages={isLoadingThreadDetail}
+                onBack={() => {
+                  setChatTeacher(null);
+                  setSelectedThreadId(null);
+                }}
                 onViewProfile={setSelectedProfile}
                 isFriend={friends.some(friend => friend.id === chatTeacher.id)}
                 onSendFriendRequest={handleSendFriendRequest}
@@ -544,7 +591,21 @@ export default function App() {
               <GroupChatInterface
                 currentUser={currentUser!}
                 selectedGroup={chatGroup}
-                onBack={() => setChatGroup(null)}
+                threadDetail={threadDetailData?.success ? {
+                  thread: {
+                    id: threadDetailData.data.thread._id,
+                    name: threadDetailData.data.thread.name,
+                    avatar: threadDetailData.data.thread.avatar,
+                    type: threadDetailData.data.thread.type,
+                    members: threadDetailData.data.thread.members
+                  },
+                  messages: threadDetailData.data.messages
+                } : null}
+                isLoadingMessages={isLoadingThreadDetail}
+                onBack={() => {
+                  setChatGroup(null);
+                  setSelectedThreadId(null);
+                }}
                 language={language}
               />
             )}

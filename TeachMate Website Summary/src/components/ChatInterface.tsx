@@ -34,12 +34,16 @@ import {
   WarningOutlined,
   DeleteOutlined,
   SearchOutlined,
-  UserAddOutlined
+  UserAddOutlined,
+  CheckOutlined
 } from '@ant-design/icons';
 import { ScrollArea } from './ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import { CheckCheck, MessageCircle } from 'lucide-react';
+import { sendMessage } from '../apis/chat.api';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
@@ -48,6 +52,11 @@ const { Text, Title } = Typography;
 interface ChatInterfaceProps {
   currentTeacher: Teacher;
   selectedTeacher: Teacher;
+  threadDetail?: {
+    thread: any;
+    messages: any[];
+  } | null;
+  isLoadingMessages?: boolean;
   onBack: () => void;
   onViewProfile: (teacher: Teacher) => void;
   isFriend: boolean;
@@ -82,16 +91,20 @@ interface SharedMedia {
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😊', '😂', '🎉', '👏'];
 
-export function ChatInterface({ 
-  currentTeacher, 
-  selectedTeacher, 
-  onBack, 
-  onViewProfile, 
-  isFriend, 
-  onSendFriendRequest, 
-  language 
+export function ChatInterface({
+  currentTeacher,
+  selectedTeacher,
+  threadDetail,
+  isLoadingMessages = false,
+  onBack,
+  onViewProfile,
+  isFriend,
+  onSendFriendRequest,
+  language
 }: ChatInterfaceProps) {
   const t = translations[language];
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  
   const [messages, setMessages] = useState<EnhancedMessage[]>([
     {
       id: '1',
@@ -114,6 +127,7 @@ export function ChatInterface({
   ]);
   
   const [newMessage, setNewMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -146,21 +160,41 @@ export function ChatInterface({
     { id: '3', name: 'STEM Education Innovation', memberCount: 189 }
   ]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || isSending) return;
     
-    const message: EnhancedMessage = {
-      id: Date.now().toString(),
-      senderId: currentTeacher.id,
-      receiverId: selectedTeacher.id,
-      content: newMessage,
-      timestamp: new Date(),
-      type: 'text',
-      reactions: []
-    };
-    
-    setMessages([...messages, message]);
-    setNewMessage('');
+    setIsSending(true);
+    try {
+      const messageData = {
+        content: newMessage,
+        threadId: threadDetail?.thread?._id,
+        recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined
+      };
+
+      const response = await sendMessage(messageData);
+      
+      if (response.success) {
+        setNewMessage('');
+        toast.success(
+          language === 'ja' 
+            ? 'メッセージを送信しました' 
+            : 'Đã gửi tin nhắn'
+        );
+        
+        // Trigger refetch to get new messages
+        // The useChat hook will automatically refetch when threadId changes
+        // or you can manually trigger refetch if needed
+      }
+    } catch (error: any) {
+      console.error('Failed to send message:', error);
+      toast.error(
+        language === 'ja'
+          ? 'メッセージの送信に失敗しました'
+          : 'Gửi tin nhắn thất bại'
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleAddReaction = (messageId: string, emoji: string) => {
@@ -274,12 +308,8 @@ export function ChatInterface({
     setAppointmentDescription('');
   };
 
-  const filteredMessages = searchQuery
-    ? messages.filter(msg => msg.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    : messages;
-
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="h-full flex flex-col bg-white">
       {/* Header */}
       <div className="border-b px-6 py-4 bg-white shadow-sm flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -354,91 +384,114 @@ export function ChatInterface({
         )}
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-6 bg-gray-50">
-        <div className="space-y-4 max-w-4xl mx-auto">
-          {filteredMessages.map((message) => {
-            const isCurrentUser = message.senderId === currentTeacher.id;
-            
-            return (
-              <div
-                key={message.id}
-                className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
-              >
-                <div className={`max-w-[70%]`}>
-                  <div className="group relative">
+      {/* Messages Area */}
+      <ScrollArea className="flex-1 p-4">
+        {isLoadingMessages ? (
+          <div className="flex justify-center items-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">
+                {language === 'ja' ? '読み込み中...' : 'Đang tải...'}
+              </p>
+            </div>
+          </div>
+        ) : threadDetail && threadDetail.messages.length > 0 ? (
+          <div className="space-y-3">
+            {threadDetail.messages.map((message, index) => {
+              const isOwnMessage = message.senderId._id === currentTeacher.id;
+              const showAvatar = index === 0 || 
+                threadDetail.messages[index - 1].senderId._id !== message.senderId._id;
+              const messageDate = new Date(message.createdAt);
+
+              return (
+                <div
+                  key={message._id}
+                  className={`flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                >
+                  {/* Avatar for other user (left side) */}
+                  {!isOwnMessage && (
+                    <div className="w-8 h-8 flex-shrink-0">
+                      {showAvatar ? (
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage 
+                            src={message.senderId.avatarUrl} 
+                            alt={message.senderId.name}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-gray-500 text-white text-xs">
+                            {message.senderId.name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Message Bubble */}
+                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[65%]`}>
                     <div
-                      className={`p-3 rounded-lg ${
-                        isCurrentUser
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-white border text-gray-900'
+                      className={`px-4 py-2.5 shadow-sm ${
+                        isOwnMessage
+                          ? 'bg-blue-600 text-white rounded-[20px] rounded-tr-md'
+                          : 'bg-gray-200 text-gray-900 rounded-[20px] rounded-tl-md'
                       }`}
                     >
-                      <p>{message.content}</p>
+                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                        {message.content}
+                      </p>
                     </div>
-                    
-                    {/* Hover Reactions */}
-                    <div className={`absolute -top-8 ${isCurrentUser ? 'right-0' : 'left-0'} opacity-0 group-hover:opacity-100 transition-opacity`}>
-                      <Space className="bg-white border rounded-full shadow-lg p-1">
-                        {EMOJI_OPTIONS.slice(0, 4).map(emoji => (
-                          <AntButton
-                            key={emoji}
-                            type="text"
-                            size="small"
-                            onClick={() => handleAddReaction(message.id, emoji)}
-                            className="hover:bg-gray-100"
-                          >
-                            {emoji}
-                          </AntButton>
-                        ))}
-                        <Popover
-                          content={
-                            <Space wrap>
-                              {EMOJI_OPTIONS.map(emoji => (
-                                <AntButton
-                                  key={emoji}
-                                  type="text"
-                                  onClick={() => handleAddReaction(message.id, emoji)}
-                                >
-                                  {emoji}
-                                </AntButton>
-                              ))}
-                            </Space>
-                          }
-                          trigger="click"
-                        >
-                          <AntButton type="text" size="small">
-                            <SmileOutlined />
-                          </AntButton>
-                        </Popover>
-                      </Space>
+
+                    <div className="flex items-center gap-1 mt-1 px-2">
+                      <Text className="text-xs text-gray-400">
+                        {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </Text>
+                      {isOwnMessage && message.isReadByMe && (
+                        <CheckOutlined className="text-xs text-blue-500" />
+                      )}
                     </div>
                   </div>
-                  
-                  {/* Reactions */}
-                  {message.reactions && message.reactions.length > 0 && (
-                    <Space size="small" className="mt-1">
-                      {message.reactions.map((reaction) => (
-                        <Tag
-                          key={reaction.emoji}
-                          onClick={() => handleAddReaction(message.id, reaction.emoji)}
-                          className="cursor-pointer"
-                          color={reaction.userIds.includes(currentTeacher.id) ? 'blue' : 'default'}
-                        >
-                          {reaction.emoji} {reaction.count}
-                        </Tag>
-                      ))}
-                    </Space>
+
+                  {/* Avatar for own message (right side) */}
+                  {isOwnMessage && (
+                    <div className="w-8 h-8 flex-shrink-0">
+                      {showAvatar ? (
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage 
+                            src={currentTeacher.avatar} 
+                            alt={currentTeacher.name}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-blue-600 text-white text-xs">
+                            {currentTeacher.name.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </div>
                   )}
-                  
-                  <Text type="secondary" className="text-xs block mt-1">
-                    {message.timestamp.toLocaleTimeString()}
-                  </Text>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <SendOutlined className="text-5xl mx-auto mb-4 opacity-50" />
+              <p>{language === 'ja' ? 'メッセージがありません' : 'Chưa có tin nhắn nào'}</p>
+              <p className="text-sm mt-2">
+                {language === 'ja' 
+                  ? '最初のメッセージを送信してください' 
+                  : 'Gửi tin nhắn đầu tiên'}
+              </p>
+            </div>
+          </div>
+        )}
       </ScrollArea>
 
       {/* Input */}
@@ -462,14 +515,22 @@ export function ChatInterface({
             placeholder={language === 'ja' ? 'メッセージを入力...' : 'Nhập tin nhắn...'}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onPressEnter={handleSendMessage}
+            onPressEnter={(e) => {
+              if (!e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
             style={{ flex: 1 }}
+            disabled={isSending}
           />
           
           <AntButton 
             type="primary" 
             icon={<SendOutlined />}
             onClick={handleSendMessage}
+            loading={isSending}
+            disabled={!newMessage.trim() || isSending}
           >
             {language === 'ja' ? '送信' : 'Gửi'}
           </AntButton>
