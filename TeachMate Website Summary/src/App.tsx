@@ -103,8 +103,6 @@ export default function App() {
   }, [selectedThreadId, refetchThreadDetail]);
 
   const t = translations[language];
-
-  // Check for existing token on mount and fetch user profile
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('token');
@@ -151,7 +149,11 @@ export default function App() {
       }
     };
 
+    // initial load
     fetchFriendRequests();
+    // polling every 10s
+    const interval = setInterval(fetchFriendRequests, 10000);
+    return () => clearInterval(interval);
   }, [isAuthenticated, isAdmin]);
 
   // Fetch friend list when authenticated
@@ -172,7 +174,11 @@ export default function App() {
       }
     };
 
+    // initial load
     fetchFriendList();
+    // polling every 12s
+    const interval = setInterval(fetchFriendList, 12000);
+    return () => clearInterval(interval);
   }, [isAuthenticated, isAdmin]);
 
   // Fetch threads function
@@ -196,6 +202,9 @@ export default function App() {
   };
   useEffect(() => {
     fetchThreads();
+    // polling threads every 5s for near realtime
+    const interval = setInterval(fetchThreads, 5000);
+    return () => clearInterval(interval);
   }, [isAuthenticated, isAdmin, currentUser?.id]);
 
   // Poll notifications for near-realtime updates
@@ -211,11 +220,11 @@ export default function App() {
           setUnreadNotificationsCount(unread);
         }
       } catch (e) {
-        // ignore transient errors
+
       }
     };
 
-    // initial and interval
+
     fetchNoti();
     const interval = setInterval(fetchNoti, 4000);
     return () => {
@@ -340,6 +349,51 @@ export default function App() {
             ? `${teacher.name}さんに友達リクエストを送信しました`
             : `Đã gửi lời mời kết bạn đến ${teacher.name}`
         );
+
+        // Start short-term polling to reflect state quickly
+        let attempts = 0;
+        const maxAttempts = 12; // ~1 minute if 5s interval
+        const poll = async () => {
+          attempts++;
+          try {
+            // Refresh friend list
+            const friendListResponse = await getFriendList();
+            if (friendListResponse.success) {
+              const mappedFriends = mapFriendListData(friendListResponse.data.friends);
+              setFriends(mappedFriends);
+              // If accepted, stop polling
+              if (mappedFriends.some(f => f.id === teacher.id)) {
+                toast.success(
+                  language === 'ja'
+                    ? `${teacher.name}と友達になりました`
+                    : `Bạn và ${teacher.name} đã trở thành bạn bè`
+                );
+                return true;
+              }
+            }
+
+            // Refresh incoming friend requests as well (might change)
+            const requestsRes = await getFriendRequest();
+            if (requestsRes.success) {
+              const mappedRequests = mapFriendRequestData(requestsRes.data);
+              setFriendRequests(mappedRequests);
+            }
+          } catch (e) {
+            // ignore transient errors
+          }
+          return false;
+        };
+
+        // Initial immediate poll, then interval
+        const stopNow = await poll();
+        if (!stopNow) {
+          const interval = setInterval(async () => {
+            const done = await poll();
+            if (done || attempts >= maxAttempts) {
+              clearInterval(interval);
+            }
+          }, 5000);
+        }
       } else {
         toast.error(
           language === 'ja'

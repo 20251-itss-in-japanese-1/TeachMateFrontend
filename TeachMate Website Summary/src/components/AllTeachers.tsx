@@ -81,6 +81,31 @@ export function AllTeachers({
     fetchFriendSuggestions();
   }, [currentPage, itemsPerPage]);
 
+  // Polling friend suggestions periodically when not searching
+  useEffect(() => {
+    if (searchQuery.trim()) return; // don't poll while searching
+
+    let active = true;
+    const poll = async () => {
+      try {
+        const response = await friendSuggest(currentPage, itemsPerPage);
+        if (active && response.success) {
+          const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
+          setSuggestedTeachers(mappedTeachers);
+          setTotalTeachers(response.meta.total);
+        }
+      } catch (e) {
+        // ignore transient errors in polling
+      }
+    };
+
+    const interval = setInterval(poll, 10000); // 10s
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [searchQuery, currentPage, itemsPerPage]);
+
   // Search teachers from API with debounce
   useEffect(() => {
     if (!searchQuery.trim()) {
