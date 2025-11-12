@@ -26,28 +26,4 @@ export interface Message {
 export interface MessagesResponse {
     success: boolean;
     message: string;
-    data: {
-        _id: string;
-        threadId: {
-            _id: string;
-            type: "direct_friend" | 'direct_stranger' | 'group';
-            members: {
-                userId: {
-                    _id: string;
-                    name: string;
-                    email: string;
-                    avatarUrl?: string;
-                },
-                role: string;
-                lastReadAt: string;
-                _id: string;
-            }[];
-        };
-        senderId: {
-            _id: string;
-            name: string;
-            email: string;
-            avatarUrl?: string;
-        }
-    }
 }
