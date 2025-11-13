@@ -163,9 +163,9 @@ export function SecondarySidebar({
 
   if (view === 'chat') {
     return (
-      <div className="w-96 bg-gradient-to-b from-blue-50 to-white border-r-2 border-blue-100 flex flex-col shadow-sm">
+      <div className="w-96 bg-gradient-to-b from-blue-50 to-white border-r-2 border-blue-100 flex flex-col h-full shadow-sm">
         {/* Search Bar */}
-        <div className="p-4 border-b-2 border-blue-100 bg-white/80 backdrop-blur-sm">
+        <div className="p-4 border-b-2 border-blue-100 bg-white/80 backdrop-blur-sm flex-shrink-0">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-500" />
@@ -198,7 +198,7 @@ export function SecondarySidebar({
         </div>
 
         {/* Message Filters */}
-        <div className="px-4 py-3 border-b-2 border-blue-100 bg-white/60">
+        <div className="px-4 py-3 border-b-2 border-blue-100 bg-white/60 flex-shrink-0">
           <div className="flex gap-2">
             <AntButton
               type={messageFilter === 'all' ? 'primary' : 'default'}
@@ -228,7 +228,7 @@ export function SecondarySidebar({
         </div>
 
         {/* Threads List */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 overflow-auto">
           <div className="p-2">
             {isLoadingThreads ? (
               <div className="text-center py-8 text-gray-500">
