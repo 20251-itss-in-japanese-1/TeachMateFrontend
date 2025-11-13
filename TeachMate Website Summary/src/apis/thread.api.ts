@@ -10,3 +10,8 @@ export async function getThreadDetail(threadId: string) {
     const res = Http.get<ThreadDetailResponse>(`/thread/${threadId}`);
     return res.then(response => response.data);
 }
+
+export async function createThreadGroup(name: string, memberIds: string[]) {
+    const res = Http.post<ThreadDetailResponse>('/thread/group', {name, memberIds: memberIds});
+    return res.then(response => response.data);
+}

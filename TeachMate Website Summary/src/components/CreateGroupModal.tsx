@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Modal, Input, Avatar, Button, Space, Typography, Divider, Checkbox } from 'antd';
+import { Modal, Input, Avatar, Button, Space, Typography, Divider, Checkbox, message } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { Teacher } from '../types';
 import { Language } from '../translations';
+import { createThreadGroup } from '../apis/thread.api';
 
 const { Text } = Typography;
 
@@ -10,7 +11,8 @@ interface CreateGroupModalProps {
   open: boolean;
   onClose: () => void;
   teachers: Teacher[];
-  onCreateGroup: (name: string, memberIds: string[]) => void;
+  onCreateGroup?: (name: string, memberIds: string[]) => void;
+  onGroupCreated?: () => void;
   language: Language;
 }
 
@@ -19,11 +21,13 @@ export function CreateGroupModal({
   onClose,
   teachers,
   onCreateGroup,
+  onGroupCreated,
   language
 }: CreateGroupModalProps) {
   const [groupName, setGroupName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
 
   const translations = {
     ja: {
@@ -53,13 +57,46 @@ export function CreateGroupModal({
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const handleCreate = () => {
-    if (!groupName.trim()) return;
-    onCreateGroup(groupName.trim(), selectedIds);
-    setGroupName('');
-    setSearchQuery('');
-    setSelectedIds([]);
-    onClose();
+  const handleCreate = async () => {
+    if (!groupName.trim()) {
+      message.warning(language === 'ja' ? 'グループ名を入力してください' : 'Vui lòng nhập tên nhóm');
+      return;
+    }
+    
+    setIsCreating(true);
+    try {
+      // Call API to create thread group
+      const response = await createThreadGroup(groupName.trim(), selectedIds);
+      
+      if (response.success) {
+        message.success(language === 'ja' ? 'グループを作成しました' : 'Tạo nhóm thành công');
+        
+        // Reset form
+        setGroupName('');
+        setSearchQuery('');
+        setSelectedIds([]);
+        
+        // Close modal
+        onClose();
+        
+        // Call callback to refresh threads list
+        if (onGroupCreated) {
+          onGroupCreated();
+        }
+        
+        // Fallback: call old callback if provided
+        if (onCreateGroup) {
+          onCreateGroup(groupName.trim(), selectedIds);
+        }
+      } else {
+        message.error(response.message || (language === 'ja' ? 'グループの作成に失敗しました' : 'Tạo nhóm thất bại'));
+      }
+    } catch (error) {
+      console.error('Failed to create group:', error);
+      message.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -68,8 +105,8 @@ export function CreateGroupModal({
       open={open}
       onCancel={onClose}
       footer={[
-        <Button key="cancel" onClick={onClose}>{t.cancel}</Button>,
-        <Button key="create" type="primary" onClick={handleCreate}>{t.create}</Button>
+        <Button key="cancel" onClick={onClose} disabled={isCreating}>{t.cancel}</Button>,
+        <Button key="create" type="primary" onClick={handleCreate} loading={isCreating}>{t.create}</Button>
       ]}
       width={600}
       centered

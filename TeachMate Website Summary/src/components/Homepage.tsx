@@ -30,6 +30,7 @@ import {
   EyeOutlined
 } from '@ant-design/icons';
 import { friendSuggest } from '../apis/friend.api';
+import { searchTeacher } from '../apis/user.api';
 import { mapUserToTeacher } from '../utils/mappers';
 
 const { Title, Text, Paragraph } = Typography;
@@ -114,6 +115,57 @@ export function Homepage({
 
     fetchFriendSuggestions();
   }, [teacherPage, itemsPerPage]);
+
+  // Polling friend suggestions periodically when not searching
+  useEffect(() => {
+    if (searchQuery.trim()) return; // do not poll while searching
+
+    let active = true;
+    const poll = async () => {
+      try {
+        const response = await friendSuggest(teacherPage, itemsPerPage);
+        if (active && response.success) {
+          const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
+          setSuggestedTeachers(mappedTeachers);
+          setTotalTeachers(response.meta.total);
+        }
+      } catch (e) {
+        // ignore transient errors in polling
+      }
+    };
+
+    const interval = setInterval(poll, 10000); // 10s
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [searchQuery, teacherPage, itemsPerPage]);
+
+  // Search teachers from API with debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      return; // Skip search if query is empty
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsLoadingTeachers(true);
+      try {
+        const response = await searchTeacher(searchQuery);
+        if (response.success) {
+          const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
+          setSuggestedTeachers(mappedTeachers);
+          setTotalTeachers(mappedTeachers.length);
+          setTeacherPage(1); // Reset to first page on new search
+        }
+      } catch (error) {
+        console.error('Failed to search teachers:', error);
+      } finally {
+        setIsLoadingTeachers(false);
+      }
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   // Get all unique specialties for filter
   const allSpecialties = useMemo(() => {

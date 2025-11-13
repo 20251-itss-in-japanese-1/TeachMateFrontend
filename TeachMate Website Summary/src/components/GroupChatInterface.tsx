@@ -47,6 +47,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import { sendMessage } from '../apis/chat.api';
+import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
 const { Text, Title, Paragraph } = Typography;
@@ -519,14 +520,43 @@ export function GroupChatInterface({
   };
 
   const handleReportGroup = () => {
+    let reason = '';
     Modal.confirm({
       title: language === 'ja' ? 'グループを報告' : 'Báo cáo nhóm',
-      content: language === 'ja' ? 'このグループを管理者に報告しますか？' : 'Bạn có chắc chắn muốn báo cáo nhóm này cho quản trị viên?',
+      content: (
+        <div className="mt-2">
+          <Text className="block mb-2 text-gray-600">
+            {language === 'ja' ? '理由を入力してください' : 'Vui lòng nhập lý do báo cáo'}
+          </Text>
+          <TextArea
+            rows={4}
+            placeholder={language === 'ja' ? 'スパム、不適切な内容など' : 'Spam, nội dung không phù hợp, v.v.'}
+            onChange={(e: any) => {
+              reason = e.target.value;
+            }}
+          />
+        </div>
+      ),
       okText: language === 'ja' ? '報告' : 'Báo cáo',
       cancelText: language === 'ja' ? 'キャンセル' : 'Hủy',
       okButtonProps: { danger: true },
-      onOk() {
-        toast.success(language === 'ja' ? '報告を送信しました' : 'Đã gửi báo cáo');
+      onOk: async () => {
+        if (!reason || !reason.trim()) {
+          toast.error(language === 'ja' ? '理由を入力してください' : 'Vui lòng nhập lý do');
+          return Promise.reject();
+        }
+        try {
+          await reportUser({
+            targetUserId: selectedGroup.id,
+            targetType: 'group',
+            reason: reason.trim()
+          });
+          toast.success(language === 'ja' ? '報告を送信しました' : 'Đã gửi báo cáo');
+        } catch (err) {
+          console.error('Report group failed:', err);
+          toast.error(language === 'ja' ? '報告の送信に失敗しました' : 'Gửi báo cáo thất bại');
+          return Promise.reject(err);
+        }
       }
     });
   };

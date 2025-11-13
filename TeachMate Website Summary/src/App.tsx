@@ -21,8 +21,10 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { getUserProfile } from './apis/user.api';
-import { sendFriendRequest, getFriendRequest, acceptFriendRequest, rejectFriendRequest, getFriendList } from './apis/friend.api';
-import { getThreads} from './apis/thread.api';
+import { sendFriendRequest, acceptFriendRequest, rejectFriendRequest } from './apis/friend.api';
+import { useThreads } from './hooks/useThreads';
+import { useNotifications } from './hooks/useNoti';
+import { useFriendList, useFriendRequests } from './hooks/useFriend';
 import { mapUserToTeacher, mapFriendListData, mapFriendRequestData, mapThreadData } from './utils/mappers';
 import { useChat } from './hooks/useChat';
 import 'antd/dist/reset.css';
@@ -81,10 +83,11 @@ export default function App() {
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [friends, setFriends] = useState<Teacher[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
-  const [isLoadingFriendRequests, setIsLoadingFriendRequests] = useState(false);
+  const [isLoadingFriendRequests, setIsLoadingFriendRequests] = useState(false); // retained for compatibility
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [isLoadingThreads, setIsLoadingThreads] = useState(false);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(false); // retained for compatibility
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   // Use chat hook for caching messages
   const { data: threadDetailData, isLoading: isLoadingThreadDetail, refetch: refetchThreadDetail } = useChat(selectedThreadId);
@@ -101,8 +104,6 @@ export default function App() {
   }, [selectedThreadId, refetchThreadDetail]);
 
   const t = translations[language];
-
-  // Check for existing token on mount and fetch user profile
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('token');
@@ -128,74 +129,38 @@ export default function App() {
     initAuth();
   }, []);
 
-  // Fetch friend requests when authenticated
+  // React Query friend requests polling & mapping
+  const { data: friendRequestsData, refetch: refetchFriendRequests } = useFriendRequests(isAuthenticated && !isAdmin);
   useEffect(() => {
-    const fetchFriendRequests = async () => {
-      if (!isAuthenticated || isAdmin) return;
-      
-      setIsLoadingFriendRequests(true);
-      try {
-        const response = await getFriendRequest();
-        
-        if (response.success) {
-          const mappedRequests = mapFriendRequestData(response.data);
-          setFriendRequests(mappedRequests);
-        }
-      } catch (error) {
-        console.error('Failed to fetch friend requests:', error);
-        setFriendRequests([]);
-      } finally {
-        setIsLoadingFriendRequests(false);
-      }
-    };
+    if (friendRequestsData?.success) {
+      setFriendRequests(mapFriendRequestData(friendRequestsData.data));
+    }
+  }, [friendRequestsData]);
 
-    fetchFriendRequests();
-  }, [isAuthenticated, isAdmin]);
-
-  // Fetch friend list when authenticated
+  // React Query friend list polling & mapping
+  const { data: friendListData, refetch: refetchFriendList } = useFriendList(isAuthenticated && !isAdmin);
   useEffect(() => {
-    const fetchFriendList = async () => {
-      if (!isAuthenticated || isAdmin) return;
-      
-      try {
-        const response = await getFriendList();
-        
-        if (response.success) {
-          const mappedFriends = mapFriendListData(response.data.friends);
-          setFriends(mappedFriends);
-        }
-      } catch (error) {
-        console.error('Failed to fetch friend list:', error);
-        setFriends([]);
-      }
-    };
+    if (friendListData?.success) {
+      setFriends(mapFriendListData(friendListData.data.friends));
+    }
+  }, [friendListData]);
 
-    fetchFriendList();
-  }, [isAuthenticated, isAdmin]);
-
-  // Fetch threads when authenticated
+  // React Query threads polling & mapping
+  const { data: threadsData, refetch: refetchThreads } = useThreads(isAuthenticated && !isAdmin);
   useEffect(() => {
-    const fetchThreads = async () => {
-      if (!isAuthenticated || isAdmin) return;
-      
-      setIsLoadingThreads(true);
-      try {
-        const response = await getThreads();
-        
-        if (response.success) {
-          const mappedThreads = mapThreadData(response.data, currentUser?.id);
-          setThreads(mappedThreads);
-        }
-      } catch (error) {
-        console.error('Failed to fetch threads:', error);
-        setThreads([]);
-      } finally {
-        setIsLoadingThreads(false);
-      }
-    };
+    if (threadsData?.success) {
+      setThreads(mapThreadData(threadsData.data, currentUser?.id));
+    }
+  }, [threadsData, currentUser?.id]);
 
-    fetchThreads();
-  }, [isAuthenticated, isAdmin, currentUser?.id]);
+  // React Query notifications polling & mapping
+  const { data: notificationsData } = useNotifications(isAuthenticated && !isAdmin);
+  useEffect(() => {
+    if (notificationsData?.success) {
+      const unread = (notificationsData.data || []).filter((n) => !n.read).length;
+      setUnreadNotificationsCount(unread);
+    }
+  }, [notificationsData]);
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'ja' ? 'vi' : 'ja');
@@ -288,11 +253,7 @@ export default function App() {
       setActiveView('chat');
 
       // Refresh threads to update unread count in background
-      const threadsResponse = await getThreads();
-      if (threadsResponse.success) {
-        const mappedThreads = mapThreadData(threadsResponse.data, currentUser?.id);
-        setThreads(mappedThreads);
-      }
+      // No direct refetch needed; React Query interval will refresh threadsData automatically
     } catch (error) {
       console.error('Failed to select thread:', error);
       toast.error(
@@ -313,6 +274,51 @@ export default function App() {
             ? `${teacher.name}さんに友達リクエストを送信しました`
             : `Đã gửi lời mời kết bạn đến ${teacher.name}`
         );
+
+        // Start short-term polling to reflect state quickly
+        let attempts = 0;
+        const maxAttempts = 12; // ~1 minute if 5s interval
+        const poll = async () => {
+          attempts++;
+          try {
+            // Refresh friend list via cache refetch
+            const friendListResponse = await refetchFriendList();
+            if (friendListResponse.data?.success) {
+              const mappedFriends = mapFriendListData(friendListResponse.data.data.friends);
+              setFriends(mappedFriends);
+              // If accepted, stop polling
+              if (mappedFriends.some(f => f.id === teacher.id)) {
+                toast.success(
+                  language === 'ja'
+                    ? `${teacher.name}と友達になりました`
+                    : `Bạn và ${teacher.name} đã trở thành bạn bè`
+                );
+                return true;
+              }
+            }
+
+            // Refresh incoming friend requests as well (might change)
+            const requestsRes = await refetchFriendRequests();
+            if (requestsRes.data?.success) {
+              const mappedRequests = mapFriendRequestData(requestsRes.data.data);
+              setFriendRequests(mappedRequests);
+            }
+          } catch (e) {
+            // ignore transient errors
+          }
+          return false;
+        };
+
+        // Initial immediate poll, then interval
+        const stopNow = await poll();
+        if (!stopNow) {
+          const interval = setInterval(async () => {
+            const done = await poll();
+            if (done || attempts >= maxAttempts) {
+              clearInterval(interval);
+            }
+          }, 5000);
+        }
       } else {
         toast.error(
           language === 'ja'
@@ -364,17 +370,16 @@ export default function App() {
         
         setFriendRequests(prev => prev.filter(req => req.id !== requestId));
         
-        // Refetch friend list
-        const friendListResponse = await getFriendList();
-        if (friendListResponse.success) {
-          const mappedFriends = mapFriendListData(friendListResponse.data.friends);
+        // Refetch friend list via cache
+        const friendListResponse = await refetchFriendList();
+        if (friendListResponse.data?.success) {
+          const mappedFriends = mapFriendListData(friendListResponse.data.data.friends);
           setFriends(mappedFriends);
         }
-        
-        // Refetch friend requests
-        const updatedRequests = await getFriendRequest();
-        if (updatedRequests.success) {
-          const mappedRequests = mapFriendRequestData(updatedRequests.data);
+        // Refetch friend requests via cache
+        const updatedRequests = await refetchFriendRequests();
+        if (updatedRequests.data?.success) {
+          const mappedRequests = mapFriendRequestData(updatedRequests.data.data);
           setFriendRequests(mappedRequests);
         }
       } else {
@@ -482,7 +487,7 @@ export default function App() {
           onEditProfile={() => setIsEditingProfile(true)}
           onLogout={handleLogout}
           onViewNotifications={() => setActiveView('notifications')}
-          unreadNotificationsCount={0}
+          unreadNotificationsCount={unreadNotificationsCount}
           language={language}
         />
 
@@ -584,6 +589,11 @@ export default function App() {
                 isFriend={friends.some(friend => friend.id === chatTeacher.id)}
                 onSendFriendRequest={handleSendFriendRequest}
                 language={language}
+                onThreadCreated={(threadId) => {
+                  setSelectedThreadId(threadId);
+                  // Refresh threads to include the new thread via cache
+                  refetchThreads();
+                }}
               />
             )}
 
@@ -671,9 +681,12 @@ export default function App() {
       <CreateGroupModal
         open={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
-        teachers={[]}
-        onCreateGroup={(name, memberIds) => {
-          toast.success(language === 'ja' ? `${name}を作成しました` : `Đã tạo nhóm ${name}`);
+        teachers={friends}
+        onGroupCreated={() => {
+          // Force a refetch of threads list after creating group (cache refresh)
+          refetchThreads();
+          // Switch to chat view to see the new group
+          setActiveView('chat');
         }}
         language={language}
       />

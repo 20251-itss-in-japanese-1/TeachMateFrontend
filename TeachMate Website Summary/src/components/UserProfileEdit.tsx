@@ -19,6 +19,9 @@ import {
   PlusOutlined, 
   CloseOutlined 
 } from '@ant-design/icons';
+import { updateUserProfile, getUserProfile } from '../apis/user.api';
+import { mapUserToTeacher } from '../utils/mappers';
+import { UpdateUserProfileRequest } from '../types/user.type';
 
 const { TextArea } = AntInput;
 const { Text, Title } = Typography;
@@ -44,10 +47,41 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
   const [newSpecialty, setNewSpecialty] = useState('');
   const [newSubject, setNewSubject] = useState('');
   const [newInterest, setNewInterest] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    onSave(formData);
-    onClose();
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      // Prepare payload from current form data
+      const payload: UpdateUserProfileRequest = {
+        fullName: formData.name,
+        nationality: formData.nationality,
+        experience: formData.experience,
+        bio: formData.bio,
+        specialties_major: formData.specialties,
+        specialties_subject: formData.subjects,
+      };
+
+      // Update profile then refetch to ensure freshest server data
+      const updateRes = await updateUserProfile(payload);
+      if (updateRes?.success) {
+        const me = await getUserProfile();
+        if (me?.success) {
+          const refreshedTeacher = mapUserToTeacher(me.data);
+          onSave(refreshedTeacher);
+          onClose();
+          return;
+        }
+      }
+      // Fallback: if update succeeded but refetch failed, still return local form data
+      onSave(formData);
+      onClose();
+    } catch (e) {
+      console.error('Failed to update profile:', e);
+      // On failure, keep modal open for user to retry or cancel
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const addSpecialty = () => {
@@ -116,10 +150,10 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
       }}
       title={t.editProfile}
       footer={[
-        <AntButton key="cancel" onClick={onClose}>
+        <AntButton key="cancel" onClick={onClose} disabled={isSaving}>
           {t.cancel}
         </AntButton>,
-        <AntButton key="save" type="primary" onClick={handleSave}>
+        <AntButton key="save" type="primary" onClick={handleSave} loading={isSaving} disabled={isSaving}>
           {t.saveChanges}
         </AntButton>
       ]}

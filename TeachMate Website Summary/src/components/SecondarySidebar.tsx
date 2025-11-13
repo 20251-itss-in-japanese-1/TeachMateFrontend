@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Search, UserPlus, Users, Hash } from 'lucide-react';
-import { Button as AntButton } from 'antd';
+import { Search, UserPlus, Users, Hash, Flag } from 'lucide-react';
+import { Button as AntButton, Modal, Input as AntInput, Select, message } from 'antd';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -9,6 +9,9 @@ import { Badge } from './ui/badge';
 import { Badge as AntBadge } from 'antd';
 import { translations, Language } from '../translations';
 import { Teacher } from '../types';
+import { reportUser } from '../apis/user.api';
+
+const { TextArea } = AntInput;
 
 // Generate random avatar colors
 const getAvatarColor = (id: string) => {
@@ -82,6 +85,12 @@ export function SecondarySidebar({
   const [searchQuery, setSearchQuery] = useState('');
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
   const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
+  
+  // Report modal states
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportingUser, setReportingUser] = useState<Teacher | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   const handleAccept = async (requestId: string) => {
     setLoadingRequests(prev => new Set(prev).add(requestId));
@@ -101,6 +110,42 @@ export function SecondarySidebar({
       newSet.delete(requestId);
       return newSet;
     });
+  };
+
+  const handleOpenReportModal = (user: Teacher) => {
+    setReportingUser(user);
+    setReportModalVisible(true);
+    setReportReason('');
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportingUser || !reportReason.trim()) {
+      message.warning(language === 'ja' ? '理由を入力してください' : 'Vui lòng nhập lý do báo cáo');
+      return;
+    }
+
+    setIsSubmittingReport(true);
+    try {
+      const response = await reportUser({
+        targetUserId: reportingUser.id,
+        reason: reportReason.trim(),
+        targetType: 'user'
+      });
+
+      if (response.success) {
+        message.success(language === 'ja' ? '報告が送信されました' : 'Đã gửi báo cáo thành công');
+        setReportModalVisible(false);
+        setReportingUser(null);
+        setReportReason('');
+      } else {
+        message.error(response.message || (language === 'ja' ? '報告の送信に失敗しました' : 'Gửi báo cáo thất bại'));
+      }
+    } catch (error) {
+      console.error('Failed to report user:', error);
+      message.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+    } finally {
+      setIsSubmittingReport(false);
+    }
   };
 
   const filteredFriends = friends.filter(friend =>
@@ -196,61 +241,145 @@ export function SecondarySidebar({
               </div>
             ) : (
               filteredThreads.map((thread) => (
-                <button
+                <div
                   key={thread.id}
-                  onClick={() => onSelectThread && onSelectThread(thread)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border ${
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border group ${
                     thread.unreadCount > 0 
                       ? 'border-blue-300 bg-blue-50/50' 
                       : 'border-transparent hover:border-blue-200'
                   }`}
                 >
-                  <div className="relative flex-shrink-0">
-                    <Avatar className="w-10 h-10 border-2 border-blue-100">
-                      {thread.avatar ? (
-                        <AvatarImage src={thread.avatar} alt={thread.name || ''} className="object-cover" />
-                      ) : null}
-                      <AvatarFallback className={`${thread.type === 'group' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
-                        {thread.type === 'group' ? (
-                          <Hash className="w-5 h-5 text-white" />
-                        ) : (
-                          thread.name?.charAt(0).toUpperCase() || '?'
-                        )}
-                      </AvatarFallback>
-                    </Avatar>
-                    {thread.type === 'direct_friend' && (
-                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className={`font-semibold text-gray-800 truncate ${thread.unreadCount > 0 ? 'text-blue-700' : ''}`}>
-                        {thread.name}
-                      </p>
-                      {thread.unreadCount > 0 && (
-                        <AntBadge 
-                          count={thread.unreadCount} 
-                          className="ml-2"
-                          style={{ backgroundColor: '#2563eb' }}
-                        />
+                  <button
+                    onClick={() => onSelectThread && onSelectThread(thread)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className="relative flex-shrink-0">
+                      <Avatar className="w-10 h-10 border-2 border-blue-100">
+                        {thread.avatar ? (
+                          <AvatarImage src={thread.avatar} alt={thread.name || ''} className="object-cover" />
+                        ) : null}
+                        <AvatarFallback className={`${thread.type === 'group' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
+                          {thread.type === 'group' ? (
+                            <Hash className="w-5 h-5 text-white" />
+                          ) : (
+                            thread.name?.charAt(0).toUpperCase() || '?'
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                      {thread.type === 'direct_friend' && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
                       )}
                     </div>
-                    {thread.lastMessage && (
-                      <p className={`text-sm truncate ${
-                        thread.unreadCount > 0 
-                          ? 'text-blue-700 font-medium' 
-                          : 'text-gray-600'
-                      }`}>
-                        {thread.lastMessage.senderName}: {thread.lastMessage.content}
-                      </p>
-                    )}
-                  </div>
-                </button>
+
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className={`font-semibold text-gray-800 truncate ${thread.unreadCount > 0 ? 'text-blue-700' : ''}`}>
+                          {thread.name}
+                        </p>
+                        {thread.unreadCount > 0 && (
+                          <AntBadge 
+                            count={thread.unreadCount} 
+                            className="ml-2"
+                            style={{ backgroundColor: '#2563eb' }}
+                          />
+                        )}
+                      </div>
+                      {thread.lastMessage && (
+                        <p className={`text-sm truncate ${
+                          thread.unreadCount > 0 
+                            ? 'text-blue-700 font-medium' 
+                            : 'text-gray-600'
+                        }`}>
+                          {thread.lastMessage.senderName}: {thread.lastMessage.content}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+
+                  {thread.type !== 'group' && thread.otherUser && (
+                    <AntButton
+                      type="text"
+                      size="small"
+                      icon={<Flag className="w-4 h-4" />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenReportModal(thread.otherUser as Teacher);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity !text-red-500 hover:!bg-red-50"
+                      title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
+                    />
+                  )}
+                </div>
               ))
             )}
           </div>
         </ScrollArea>
+
+        {/* Report User Modal (chat view) */}
+        <Modal
+          title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
+          open={reportModalVisible}
+          onCancel={() => {
+            setReportModalVisible(false);
+            setReportingUser(null);
+            setReportReason('');
+          }}
+          footer={[
+            <AntButton
+              key="cancel"
+              onClick={() => {
+                setReportModalVisible(false);
+                setReportingUser(null);
+                setReportReason('');
+              }}
+              disabled={isSubmittingReport}
+            >
+              {language === 'ja' ? 'キャンセル' : 'Hủy'}
+            </AntButton>,
+            <AntButton
+              key="submit"
+              type="primary"
+              danger
+              onClick={handleSubmitReport}
+              loading={isSubmittingReport}
+            >
+              {language === 'ja' ? '報告する' : 'Gửi báo cáo'}
+            </AntButton>
+          ]}
+          centered
+        >
+          {reportingUser && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <Avatar className="w-12 h-12">
+                  {reportingUser.avatar ? (
+                    <AvatarImage src={reportingUser.avatar} alt={reportingUser.name} />
+                  ) : null}
+                  <AvatarFallback className={`${getAvatarColor(reportingUser.id)} text-white`}>
+                    {reportingUser.name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold">{reportingUser.name}</p>
+                  <p className="text-sm text-gray-500">{reportingUser.specialties[0]}</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  {language === 'ja' ? '報告理由' : 'Lý do báo cáo'}
+                </label>
+                <TextArea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder={language === 'ja' ? '理由を入力してください...' : 'Nhập lý do báo cáo...'}
+                  rows={4}
+                  maxLength={500}
+                  showCount
+                />
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     );
   }
@@ -353,27 +482,42 @@ export function SecondarySidebar({
           ) : (
             <div className="space-y-1">
               {filteredFriends.map((friend) => (
-                <button
+                <div
                   key={friend.id}
-                  onClick={() => onSelectChat(friend)}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-green-50 hover:shadow-sm transition-all border border-transparent hover:border-green-200"
+                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-green-50 hover:shadow-sm transition-all border border-transparent hover:border-green-200 group"
                 >
-                  <Avatar className="w-10 h-10 border-2 border-green-100 flex-shrink-0">
-                    {friend.avatar ? (
-                      <AvatarImage src={friend.avatar} alt={friend.name} className="object-cover" />
-                    ) : null}
-                    <AvatarFallback className={`${getAvatarColor(friend.id)} text-white font-semibold`}>
-                      {friend.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{friend.name}</p>
-                    <p className="text-sm text-green-600 truncate">
-                      {friend.specialties[0]}
-                    </p>
-                  </div>
-                  <div className="w-2 h-2 bg-green-500 rounded-full shadow-sm flex-shrink-0" />
-                </button>
+                  <button
+                    onClick={() => onSelectChat(friend)}
+                    className="flex items-center gap-3 flex-1 min-w-0"
+                  >
+                    <Avatar className="w-10 h-10 border-2 border-green-100 flex-shrink-0">
+                      {friend.avatar ? (
+                        <AvatarImage src={friend.avatar} alt={friend.name} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className={`${getAvatarColor(friend.id)} text-white font-semibold`}>
+                        {friend.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 text-left min-w-0">
+                      <p className="font-semibold text-gray-800 truncate">{friend.name}</p>
+                      <p className="text-sm text-green-600 truncate">
+                        {friend.specialties[0]}
+                      </p>
+                    </div>
+                    <div className="w-2 h-2 bg-green-500 rounded-full shadow-sm flex-shrink-0" />
+                  </button>
+                  <AntButton
+                    type="text"
+                    size="small"
+                    icon={<Flag className="w-4 h-4" />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenReportModal(friend);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity !text-red-500 hover:!bg-red-50"
+                    title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -415,6 +559,72 @@ export function SecondarySidebar({
           )}
         </div>
       </ScrollArea>
+
+      {/* Report User Modal */}
+      <Modal
+        title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
+        open={reportModalVisible}
+        onCancel={() => {
+          setReportModalVisible(false);
+          setReportingUser(null);
+          setReportReason('');
+        }}
+        footer={[
+          <AntButton
+            key="cancel"
+            onClick={() => {
+              setReportModalVisible(false);
+              setReportingUser(null);
+              setReportReason('');
+            }}
+            disabled={isSubmittingReport}
+          >
+            {language === 'ja' ? 'キャンセル' : 'Hủy'}
+          </AntButton>,
+          <AntButton
+            key="submit"
+            type="primary"
+            danger
+            onClick={handleSubmitReport}
+            loading={isSubmittingReport}
+          >
+            {language === 'ja' ? '報告する' : 'Gửi báo cáo'}
+          </AntButton>
+        ]}
+        centered
+      >
+        {reportingUser && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <Avatar className="w-12 h-12">
+                {reportingUser.avatar ? (
+                  <AvatarImage src={reportingUser.avatar} alt={reportingUser.name} />
+                ) : null}
+                <AvatarFallback className={`${getAvatarColor(reportingUser.id)} text-white`}>
+                  {reportingUser.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{reportingUser.name}</p>
+                <p className="text-sm text-gray-500">{reportingUser.specialties[0]}</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                {language === 'ja' ? '報告理由' : 'Lý do báo cáo'}
+              </label>
+              <TextArea
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                placeholder={language === 'ja' ? '理由を入力してください...' : 'Nhập lý do báo cáo...'}
+                rows={4}
+                maxLength={500}
+                showCount
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
