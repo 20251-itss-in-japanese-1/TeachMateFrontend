@@ -51,6 +51,17 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
 const LoginRoute = () => {
   const { isAuthenticated, isAdmin, isLoading } = useAppContext();
 
+  // Check for OAuth token in URL before anything else
+  const urlParams = new URLSearchParams(window.location.search);
+  const tokenFromUrl = urlParams.get('token');
+  
+  // If there's a token in URL, always show LoginPage to process it
+  // even if isLoading is true
+  if (tokenFromUrl) {
+    console.log('LoginRoute: Token detected in URL, rendering LoginPage');
+    return <LoginPage />;
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">

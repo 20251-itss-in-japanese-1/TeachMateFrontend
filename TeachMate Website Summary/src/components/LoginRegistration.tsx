@@ -38,12 +38,15 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
 
   // Check for token in URL on component mount (OAuth callback)
   useEffect(() => {
+    console.log('LoginRegistration mounted, checking for token in URL...');
+    
     const handleOAuthCallback = async (token: string) => {
       setIsLoading(true);
       setError('');
       
       try {
         console.log('OAuth callback - Token received:', token.substring(0, 20) + '...');
+        console.log('Calling onLogin with token...');
         
         // Just call onLogin with the token
         // The LoginPage will handle saving token and fetching user profile
@@ -52,6 +55,8 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
           email: '', // Will be populated by LoginPage
           nationality: 'Japanese' // Default, will be updated by LoginPage
         }, token);
+        
+        console.log('onLogin completed successfully');
       } catch (error: any) {
         console.error('OAuth callback error:', error);
         setError(error.response?.data?.message || 'Failed to complete social login. Please try again.');
@@ -63,6 +68,9 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     
+    console.log('URL search params:', window.location.search);
+    console.log('Token from URL:', token);
+    
     if (token) {
       console.log('Token found in URL, processing OAuth callback...');
       // Handle login with token
@@ -70,6 +78,8 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
       
       // Clear the token from URL after processing
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      console.log('No token found in URL');
     }
   }, [onLogin]);
 
