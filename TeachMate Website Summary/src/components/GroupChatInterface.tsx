@@ -110,26 +110,35 @@ interface GroupMessage extends Message {
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😊', '😂', '🎉', '👏'];
 
+// Generate avatar colors
+const getAvatarColor = (id?: string) => {
+  const colors = ['#1890ff', '#52c41a', '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16'];
+  if (!id) return colors[0];
+  const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+  return colors[index];
+};
+
 // Helper function to render attachments
-const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number, setImageModalVisible: (visible: boolean) => void, setSelectedImage: (url: string) => void) => {
-  const isImage = attachment.mime.startsWith('image/');
-  const isPDF = attachment.mime === 'application/pdf';
-  const isDoc = attachment.mime.includes('word') || attachment.mime.includes('document');
-  const isPPT = attachment.mime.includes('presentation') || attachment.mime.includes('powerpoint');
-  const isExcel = attachment.mime.includes('sheet') || attachment.mime.includes('excel');
+const renderAttachment = (attachment: { kind?: string; mime?: string; url?: string }, index: number, setImageModalVisible: (visible: boolean) => void, setSelectedImage: (url: string) => void) => {
+  const mime = attachment?.mime || '';
+  const isImage = mime.startsWith('image/');
+  const isPDF = mime === 'application/pdf';
+  const isDoc = mime.includes('word') || mime.includes('document');
+  const isPPT = mime.includes('presentation') || mime.includes('powerpoint');
+  const isExcel = mime.includes('sheet') || mime.includes('excel');
   
   if (isImage) {
     return (
       <div key={index} className="mt-2 inline-block relative group">
         <div 
           onClick={() => {
-            setSelectedImage(attachment.url);
+            if (attachment?.url) setSelectedImage(attachment.url);
             setImageModalVisible(true);
           }}
           className="cursor-pointer relative"
         >
           <img 
-            src={attachment.url} 
+            src={attachment?.url || ''} 
             alt="attachment" 
             className="max-w-xs rounded-lg shadow-md hover:shadow-lg transition-shadow"
             style={{ maxHeight: '300px', objectFit: 'cover' }}
@@ -138,12 +147,14 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
             onClick={async (e) => {
               e.stopPropagation();
               try {
+                if (!attachment?.url) throw new Error('No attachment URL');
                 const response = await fetch(attachment.url);
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = attachment.url.split('/').pop() || 'image.jpg';
+                const filename = (attachment.url && attachment.url.split ? attachment.url.split('/').pop() : '') || 'image.jpg';
+                link.download = filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -151,7 +162,7 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
               } catch (error) {
                 console.error('Download failed:', error);
                 // Fallback: open in new tab
-                window.open(attachment.url, '_blank');
+                if (attachment?.url) window.open(attachment.url, '_blank');
               }
             }}
             className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -185,6 +196,7 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
     typeName = 'XLSX';
   }
   
+  const filename = attachment?.url && attachment.url.split ? attachment.url.split('/').pop() : '';
   return (
     <div key={index} className="flex items-center gap-2 mt-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group">
       <div className={`w-10 h-10 rounded-lg bg-${color}-100 flex items-center justify-center flex-shrink-0`}>
@@ -192,38 +204,37 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-900 truncate">
-          {attachment.url.split('/').pop() || typeName}
+          {filename || typeName}
         </div>
         <div className="text-xs text-gray-500">{typeName}</div>
       </div>
       <div className="flex items-center gap-2">
-        <a
-          href={attachment.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-700 transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <EyeOutlined className="text-lg" />
-        </a>
-        <a
-          href={attachment.url}
-          download
-          className="text-green-600 hover:text-green-700 transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <DownloadOutlined className="text-lg" />
-        </a>
+        {attachment?.url ? (
+          <>
+            <a
+              href={attachment.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <EyeOutlined className="text-lg" />
+            </a>
+            <a
+              href={attachment.url}
+              download
+              className="text-green-600 hover:text-green-700 transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DownloadOutlined className="text-lg" />
+            </a>
+          </>
+        ) : (
+          <span className="text-xs text-gray-400">No file</span>
+        )}
       </div>
     </div>
   );
-};
-
-// Generate avatar colors
-const getAvatarColor = (id: string) => {
-  const colors = ['#1890ff', '#52c41a', '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16'];
-  const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  return colors[index];
 };
 
 export function GroupChatInterface({
@@ -770,12 +781,12 @@ export function GroupChatInterface({
                       {showAvatar ? (
                         <Avatar className="w-8 h-8">
                           <AvatarImage 
-                            src={message.senderId.avatarUrl} 
-                            alt={message.senderId.name}
+                            src={message.senderId?.avatarUrl || ''} 
+                            alt={message.senderId?.name || ''}
                             className="object-cover"
                           />
                           <AvatarFallback className="bg-purple-500 text-white text-xs">
-                            {message.senderId.name.charAt(0).toUpperCase()}
+                            {(message.senderId?.name || '?').charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                       ) : (
@@ -832,12 +843,12 @@ export function GroupChatInterface({
                       {showAvatar ? (
                         <Avatar className="w-8 h-8">
                           <AvatarImage 
-                            src={currentUser.avatar} 
-                            alt={currentUser.name}
+                            src={currentUser.avatar || ''} 
+                            alt={currentUser.name || ''}
                             className="object-cover"
                           />
                           <AvatarFallback className="bg-blue-600 text-white text-xs">
-                            {currentUser.name.charAt(0).toUpperCase()}
+                            {(currentUser.name || '?').charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                       ) : (
@@ -1324,7 +1335,7 @@ export function GroupChatInterface({
                         src={member.avatar}
                         style={{ backgroundColor: getAvatarColor(member.id) }}
                       >
-                        {member.name.charAt(0)}
+                        {member.name.charAt(0).toUpperCase()}
                       </AntAvatar>
                     }
                     title={member.name}
