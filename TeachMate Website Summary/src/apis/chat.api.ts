@@ -101,8 +101,9 @@ export async function getPollById(pollId: string) {
   return res.then(r => r.data);
 }
 
-export async function votePoll(pollId: string, optionIndex: number) {
-  const res = Http.post<PollResponse>(`/poll/${pollId}/vote`, { optionIndex });
+export async function votePoll(pollId: string, optionId: string, userId?: string) {
+  // send optionId and userId (backend expects these)
+  const res = Http.post<PollResponse>(`/poll/${pollId}/vote`, { optionId, userId });
   return res.then(r => r.data);
 }
 

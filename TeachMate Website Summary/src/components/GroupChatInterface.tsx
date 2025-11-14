@@ -75,7 +75,7 @@ interface GroupEvent {
 interface GroupPoll {
   id: string;
   question: string;
-  options: Array<{ text: string; votes: number; voters: string[] }>;
+  options: Array<{ id?: string; text: string; votes: number; voters: string[] }>;
   totalVotes: number;
   createdBy: string;
   createdAt: Date;
@@ -434,19 +434,25 @@ export function GroupChatInterface({
         const mappedPolls = res.data.map((p: any) => ({
           id: p._id || p.id,
           question: p.question,
-          options: (p.options || []).map((o: any) => ({ text: o.text, votes: o.votes || 0, voters: o.voters || [] })),
-          totalVotes: p.totalVotes || (p.options || []).reduce((acc: number, o: any) => acc + (o.votes || 0), 0),
-          createdBy: p.createdBy?.name || p.createdBy || '',
-          createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-        }));
-        setGroupPolls(mappedPolls);
-      } else {
-        setGroupPolls(fallbackPolls);
-      }
-    } catch (err) {
-      console.error('getThreadPolls failed', err);
-      setGroupPolls(fallbackPolls);
-    }
+          // preserve option ids for voting
+          options: (p.options || []).map((o: any, idx: number) => ({
+            id: o._id || o.id || String(idx),
+            text: o.text,
+            votes: o.votes || 0,
+            voters: o.voters || []
+          })),
+           totalVotes: p.totalVotes || (p.options || []).reduce((acc: number, o: any) => acc + (o.votes || 0), 0),
+           createdBy: p.createdBy?.name || p.createdBy || '',
+           createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+         }));
+         setGroupPolls(mappedPolls);
+       } else {
+         setGroupPolls(fallbackPolls);
+       }
+     } catch (err) {
+       console.error('getThreadPolls failed', err);
+       setGroupPolls(fallbackPolls);
+     }
   };
 
   // Vote handler: call votePoll then refresh polls + thread messages
@@ -456,24 +462,32 @@ export function GroupChatInterface({
     setVotingPollId(pollId);
     const threadId = threadDetail?.thread?._id || selectedGroup.id;
     try {
-      const res = await votePoll(pollId, optionIndex);
-      if (res?.success) {
-        toast.success(language === 'ja' ? '投票しました' : 'Đã bỏ phiếu');
-        // refresh polls and thread messages
-        await fetchPolls(threadId);
-        if (onRefreshThread) {
-          try { await onRefreshThread(); } catch (e) { /* ignore */ }
-        }
-      } else {
-        toast.error(res?.message || (language === 'ja' ? '投票に失敗しました' : 'Bỏ phiếu thất bại'));
+      // find option id from mapped polls
+      const poll = groupPolls.find(p => p.id === pollId);
+      const option = poll?.options?.[optionIndex];
+      const optionId = option?.id;
+      const userId = (currentUser as any)?.id || (currentUser as any)?._id;
+      if (!optionId) {
+        throw new Error('Option id not found');
       }
-    } catch (err) {
-      console.error('votePoll failed', err);
-      toast.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
-    } finally {
-      setVoting(false);
-      setVotingPollId(null);
-    }
+      const res = await votePoll(pollId, optionId, userId);
+       if (res?.success) {
+         toast.success(language === 'ja' ? '投票しました' : 'Đã bỏ phiếu');
+         // refresh polls and thread messages
+         await fetchPolls(threadId);
+         if (onRefreshThread) {
+           try { await onRefreshThread(); } catch (e) { /* ignore */ }
+         }
+       } else {
+         toast.error(res?.message || (language === 'ja' ? '投票に失敗しました' : 'Bỏ phiếu thất bại'));
+       }
+     } catch (err) {
+       console.error('votePoll failed', err);
+       toast.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+     } finally {
+       setVoting(false);
+       setVotingPollId(null);
+     }
   };
 
   const handleRemoveFile = (index: number) => {
