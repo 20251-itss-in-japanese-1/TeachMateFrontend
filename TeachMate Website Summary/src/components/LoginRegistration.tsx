@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { translations, Language } from '../translations';
 import { GraduationCap } from 'lucide-react';
 import { login, register } from '../apis/auth.api';
-import { saveTokenToLocalStorage, removeTokenFromLocalStorage } from '../apis/localtoken';
 
 const ADMIN_CREDENTIALS = {
   username: "admin@gmail.com",
@@ -39,49 +38,40 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
 
   // Check for token in URL on component mount (OAuth callback)
   useEffect(() => {
+    const handleOAuthCallback = async (token: string) => {
+      setIsLoading(true);
+      setError('');
+      
+      try {
+        console.log('OAuth callback - Token received:', token.substring(0, 20) + '...');
+        
+        // Just call onLogin with the token
+        // The LoginPage will handle saving token and fetching user profile
+        await onLogin({
+          name: '', // Will be populated by LoginPage
+          email: '', // Will be populated by LoginPage
+          nationality: 'Japanese' // Default, will be updated by LoginPage
+        }, token);
+      } catch (error: any) {
+        console.error('OAuth callback error:', error);
+        setError(error.response?.data?.message || 'Failed to complete social login. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     
     if (token) {
+      console.log('Token found in URL, processing OAuth callback...');
       // Handle login with token
       handleOAuthCallback(token);
       
       // Clear the token from URL after processing
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
-
-  const handleOAuthCallback = async (token: string) => {
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      // Save token to localStorage first
-      saveTokenToLocalStorage(token);
-      
-      // Fetch user profile from API using the token
-      const { getUserProfile } = await import('../apis/user.api');
-      const response = await getUserProfile();
-      
-      if (response.success && response.data) {
-        const userData = response.data;
-        // Call onLogin with user data and token
-        await onLogin({
-          name: userData.name || userData.email.split('@')[0],
-          email: userData.email,
-          nationality: (userData.nationality as 'Japanese' | 'Vietnamese') || 'Japanese'
-        }, token);
-      } else {
-        throw new Error('Failed to fetch user profile');
-      }
-    } catch (error: any) {
-      console.error('OAuth callback error:', error);
-      setError(error.response?.data?.message || 'Failed to complete social login. Please try again.');
-      removeTokenFromLocalStorage();
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [onLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

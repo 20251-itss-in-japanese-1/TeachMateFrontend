@@ -14,20 +14,27 @@ export const LoginPage: React.FC = () => {
 
   const handleLogin = async (userData: { name: string; email: string; nationality: 'Japanese' | 'Vietnamese' }, token?: string) => {
     if (token) {
+      console.log('handleLogin called with token');
       saveTokenToLocalStorage(token);
       
       try {
+        console.log('Fetching user profile...');
         const response = await getUserProfile();
+        console.log('getUserProfile response:', response);
         
-        if (response.success) {
+        if (response.success && response.data) {
           const newUser = mapUserToTeacher(response.data);
+          console.log('Setting user and navigating:', newUser);
           setCurrentUser(newUser);
           setIsAuthenticated(true);
+          toast.success('Login successful!');
           navigate('/');
+        } else {
+          throw new Error('Failed to get user profile');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch user profile after login:', error);
-        toast.error('Failed to load user profile');
+        toast.error(error.response?.data?.message || 'Failed to load user profile');
         removeTokenFromLocalStorage();
       }
     }
