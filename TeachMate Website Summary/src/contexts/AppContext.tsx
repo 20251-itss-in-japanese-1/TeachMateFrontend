@@ -98,24 +98,35 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   // Initialize authentication
   useEffect(() => {
     const initAuth = async () => {
+      console.log('AppContext: Initializing authentication...');
       const token = getTokenFromLocalStorage();
+      console.log('AppContext: Token from localStorage:', token ? 'exists' : 'null');
+      
       if (token) {
         try {
+          console.log('AppContext: Fetching user profile...');
           const response = await getUserProfile();
+          console.log('AppContext: getUserProfile response:', response);
           
           if (response.success) {
             const user = mapUserToTeacher(response.data);
+            console.log('AppContext: User authenticated:', user.name);
             setCurrentUser(user);
             setIsAuthenticated(true);
           } else {
+            console.log('AppContext: getUserProfile failed, removing token');
             removeTokenFromLocalStorage();
           }
         } catch (error) {
-          console.error('Failed to fetch user profile:', error);
+          console.error('AppContext: Failed to fetch user profile:', error);
           removeTokenFromLocalStorage();
         }
+      } else {
+        console.log('AppContext: No token found, user not authenticated');
       }
+      
       setIsLoading(false);
+      console.log('AppContext: Initialization complete');
     };
 
     initAuth();

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -35,53 +35,6 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
     confirmPassword: '',
     nationality: '' as 'Japanese' | 'Vietnamese' | ''
   });
-
-  // Check for token in URL on component mount (OAuth callback)
-  useEffect(() => {
-    console.log('LoginRegistration mounted, checking for token in URL...');
-    
-    const handleOAuthCallback = async (token: string) => {
-      setIsLoading(true);
-      setError('');
-      
-      try {
-        console.log('OAuth callback - Token received:', token.substring(0, 20) + '...');
-        console.log('Calling onLogin with token...');
-        
-        // Just call onLogin with the token
-        // The LoginPage will handle saving token and fetching user profile
-        await onLogin({
-          name: '', // Will be populated by LoginPage
-          email: '', // Will be populated by LoginPage
-          nationality: 'Japanese' // Default, will be updated by LoginPage
-        }, token);
-        
-        console.log('onLogin completed successfully');
-      } catch (error: any) {
-        console.error('OAuth callback error:', error);
-        setError(error.response?.data?.message || 'Failed to complete social login. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    
-    console.log('URL search params:', window.location.search);
-    console.log('Token from URL:', token);
-    
-    if (token) {
-      console.log('Token found in URL, processing OAuth callback...');
-      // Handle login with token
-      handleOAuthCallback(token);
-      
-      // Clear the token from URL after processing
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-      console.log('No token found in URL');
-    }
-  }, [onLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
