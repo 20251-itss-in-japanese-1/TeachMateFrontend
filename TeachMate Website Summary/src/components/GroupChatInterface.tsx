@@ -101,7 +101,7 @@ interface GroupChatInterfaceProps {
   isLoadingMessages?: boolean;
   onBack: () => void;
   language: Language;
-  onRefreshThread?: () => Promise<any>; // allow parent to refresh thread/messages
+  onRefreshThread?: () => Promise<any>;
 }
 
 interface GroupMessage extends Message {
@@ -233,7 +233,8 @@ export function GroupChatInterface({
   threadDetail,
   isLoadingMessages = false,
   onBack,
-  language
+  language,
+  onRefreshThread
 }: GroupChatInterfaceProps) {
   const t = translations[language];
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -537,12 +538,13 @@ export function GroupChatInterface({
       const payload = {
         title: appointmentTitle,
         description: appointmentDescription || undefined,
-        startAt: startAtIso,
+        date: appointmentDate.format('DD/MM/YYYY'),
+        time: appointmentTime,
         threadId,
         userId
       };
 
-      const res = await createSchedule(payload);
+      const res = await createSchedule(payload as any);
       if (res?.success) {
         toast.success(
           language === 'ja'
@@ -555,13 +557,17 @@ export function GroupChatInterface({
         setAppointmentTime('12:00');
         setAppointmentTitle('');
         setAppointmentDescription('');
+
+        // refresh thread/messages via parent query refetch
+        if (onRefreshThread) {
+          try { await onRefreshThread(); } catch (e) { /* ignore */ }
+        }
       } else {
-        // handle non-success response
-        toast.error(language === 'ja' ? '予定の作成に失敗しました' : 'Tạo lịch hẹn thất bại');
+        toast.error(res?.message || (language === 'ja' ? '作成に失敗しました' : 'Tạo thất bại'));
       }
-    } catch (err) {
-      console.error('Failed to create appointment:', err);
-      toast.error(language === 'ja' ? '予定の作成に失敗しました' : 'Tạo lịch hẹn thất bại');
+    } catch (err: any) {
+      console.error('createSchedule failed', err);
+      toast.error(language === 'ja' ? `エラー: ${err?.message || err}` : `Lỗi: ${err?.message || err}`);
     }
   };
 

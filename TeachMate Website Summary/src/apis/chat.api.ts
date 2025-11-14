@@ -40,12 +40,15 @@ export async function sendMessageWithFile(request: SendMessageWithFileRequest) {
     return res.then(response => response.data);
 }
 
-// --- Added: Schedule API ---
+// --- Added / updated: Schedule API ---
 export interface CreateScheduleRequest {
     title: string;
     description?: string;
-    startAt: string; // ISO string
-    // backend expects threadId and userId (from server validation error)
+    // either startAt (ISO) or date + time (UI uses DD/MM/YYYY + HH:MM) can be provided
+    startAt?: string; // ISO string (optional)
+    date?: string;    // e.g. '22/11/2025' (optional)
+    time?: string;    // e.g. '12:00' (optional)
+    // backend expects threadId and userId
     threadId: string;
     userId: string;
 }
