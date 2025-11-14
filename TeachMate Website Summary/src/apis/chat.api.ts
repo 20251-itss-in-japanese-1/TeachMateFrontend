@@ -36,7 +36,8 @@ export async function sendMessageWithFile(request: SendMessageWithFileRequest) {
         headers: {
             'Content-Type': 'multipart/form-data',
         },
-    });
+    }
+);
     return res.then(response => response.data);
 }
     
