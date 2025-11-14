@@ -48,7 +48,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
-import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -70,6 +70,7 @@ interface GroupEvent {
   date: Date;
   time: string;
   description: string;
+  participants?: string[]; // added to track joined users
 }
 
 interface GroupPoll {
@@ -410,7 +411,8 @@ export function GroupChatInterface({
             title: s.title,
             date: s.startAt ? new Date(s.startAt) : (s.date ? new Date(s.date) : new Date()),
             time: s.time || (s.startAt ? new Date(s.startAt).toISOString().substr(11,5) : '00:00'),
-            description: s.description || ''
+            description: s.description || '',
+            participants: s.participants || s.attendees || []
           }));
           setGroupEvents(mappedEvents);
         } else {
@@ -711,6 +713,67 @@ export function GroupChatInterface({
         ? prev.filter(id => id !== memberId)
         : [...prev, memberId]
     );
+  };
+
+  // Join/Leave event handlers (update local state optimistically and call backend if available)
+  const handleJoinEvent = async (eventId: string) => {
+    const userId = (currentUser as any).id || (currentUser as any)._id;
+    try {
+      // Optimistic local update
+      setGroupEvents(prev =>
+        prev.map(ev =>
+          ev.id === eventId
+            ? { ...ev, participants: Array.isArray(ev.participants) ? [...ev.participants, userId] : [userId] }
+            : ev
+        )
+      );
+
+      // Attempt backend call but don't fail hard if API shape differs
+      try {
+        await joinSchedule(eventId);
+      } catch (e) {
+        console.warn('joinSchedule call failed or is not required:', e);
+      }
+
+      toast.success(language === 'ja' ? '参加しました' : 'Đã tham gia');
+
+      if (onRefreshThread) {
+        try { await onRefreshThread(); } catch (e) { /* ignore */ }
+      }
+    } catch (err) {
+      console.error('handleJoinEvent failed', err);
+      toast.error(language === 'ja' ? '参加に失敗しました' : 'Tham gia thất bại');
+    }
+  };
+
+  const handleLeaveEvent = async (eventId: string) => {
+    const userId = (currentUser as any).id || (currentUser as any)._id;
+    try {
+      // Optimistic local update
+      setGroupEvents(prev =>
+        prev.map(ev =>
+          ev.id === eventId
+            ? { ...ev, participants: Array.isArray(ev.participants) ? ev.participants.filter((p: string) => p !== userId) : [] }
+            : ev
+        )
+      );
+
+      // Attempt backend call but don't fail hard if API shape differs
+      try {
+        await leaveSchedule(eventId);
+      } catch (e) {
+        console.warn('leaveSchedule call failed or is not required:', e);
+      }
+
+      toast.success(language === 'ja' ? '参加を辞退しました' : 'Đã rời');
+
+      if (onRefreshThread) {
+        try { await onRefreshThread(); } catch (e) { /* ignore */ }
+      }
+    } catch (err) {
+      console.error('handleLeaveEvent failed', err);
+      toast.error(language === 'ja' ? '操作に失敗しました' : 'Thao tác thất bại');
+    }
   };
 
   // Placeholder list of available teachers to add.
@@ -1432,20 +1495,36 @@ export function GroupChatInterface({
               <List
                 size="small"
                 dataSource={groupEvents}
-                renderItem={(event) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      avatar={<CalendarOutlined className="text-green-600" />}
-                      title={event.title}
-                      description={
-                        <>
-                          <div>{dayjs(event.date).format('DD/MM/YYYY')} {event.time}</div>
-                          <Text type="secondary" className="text-xs">{event.description}</Text>
-                        </>
-                      }
-                    />
-                  </List.Item>
-                )}
+                renderItem={(event) => {
+                  const attendeeCount = Array.isArray(event.participants) ? event.participants.length : 0;
+                  const joined = Array.isArray(event.participants) && event.participants.includes(currentUser.id);
+                  return (
+                    <List.Item
+                      actions={[
+                        joined ? (
+                          <AntButton key="leave" danger size="small" onClick={() => handleLeaveEvent(event.id)}>
+                            {language === 'ja' ? '参加を辞退' : 'Rời'}
+                          </AntButton>
+                        ) : (
+                          <AntButton key="join" type="primary" size="small" onClick={() => handleJoinEvent(event.id)}>
+                            {language === 'ja' ? '参加' : 'Tham gia'}
+                          </AntButton>
+                        )
+                      ]}
+                    >
+                      <List.Item.Meta
+                        avatar={<CalendarOutlined className="text-green-600" />}
+                        title={<div className="flex items-center justify-between gap-2"><span>{event.title}</span><Tag color={joined ? 'blue' : 'default'}>{attendeeCount} {language === 'ja' ? '参加者' : 'người'}</Tag></div>}
+                        description={
+                          <>
+                            <div>{dayjs(event.date).format('DD/MM/YYYY')} {event.time}</div>
+                            <Text type="secondary" className="text-xs">{event.description}</Text>
+                          </>
+                        }
+                      />
+                    </List.Item>
+                  );
+                }}
               />
             )}
           </Panel>

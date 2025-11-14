@@ -68,6 +68,22 @@ export async function createSchedule(request: CreateScheduleRequest) {
 }
 
 /**
+ * Join a schedule (POST /schedule/:scheduleId/join)
+ */
+export async function joinSchedule(scheduleId: string) {
+    const res = Http.post<ScheduleResponse>(`/schedule/${scheduleId}/join`);
+    return res.then(r => r.data);
+}
+
+/**
+ * Leave a schedule (POST /schedule/:scheduleId/leave)
+ */
+export async function leaveSchedule(scheduleId: string) {
+    const res = Http.post<ScheduleResponse>(`/schedule/${scheduleId}/leave`);
+    return res.then(r => r.data);
+}
+
+/**
  * Get schedules for a thread.
  * Backend route: GET /schedule?threadId=...
  * Returns ScheduleResponse where data is expected to be an array of schedules.
