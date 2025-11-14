@@ -42,13 +42,79 @@ import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { CheckCheck, MessageCircle } from 'lucide-react';
-import { sendMessage } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
 const { Text, Title } = Typography;
+
+// Helper function to render attachments
+const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number) => {
+  const isImage = attachment.mime.startsWith('image/');
+  const isPDF = attachment.mime === 'application/pdf';
+  const isDoc = attachment.mime.includes('word') || attachment.mime.includes('document');
+  const isPPT = attachment.mime.includes('presentation') || attachment.mime.includes('powerpoint');
+  const isExcel = attachment.mime.includes('sheet') || attachment.mime.includes('excel');
+  
+  if (isImage) {
+    return (
+      <a key={index} href={attachment.url} target="_blank" rel="noopener noreferrer" className="block mt-2">
+        <img 
+          src={attachment.url} 
+          alt="attachment" 
+          className="max-w-xs rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer"
+          style={{ maxHeight: '300px', objectFit: 'cover' }}
+        />
+      </a>
+    );
+  }
+  
+  // For files (PDF, DOCX, PPTX, etc.)
+  let icon = <FileOutlined className="text-blue-600" />;
+  let color = 'blue';
+  let typeName = 'File';
+  
+  if (isPDF) {
+    icon = <FileOutlined className="text-red-600" />;
+    color = 'red';
+    typeName = 'PDF';
+  } else if (isDoc) {
+    icon = <FileOutlined className="text-blue-600" />;
+    color = 'blue';
+    typeName = 'DOCX';
+  } else if (isPPT) {
+    icon = <FileOutlined className="text-orange-600" />;
+    color = 'orange';
+    typeName = 'PPTX';
+  } else if (isExcel) {
+    icon = <FileOutlined className="text-green-600" />;
+    color = 'green';
+    typeName = 'XLSX';
+  }
+  
+  return (
+    <a 
+      key={index}
+      href={attachment.url} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 mt-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+    >
+      <div className={`w-10 h-10 rounded-lg bg-${color}-100 flex items-center justify-center flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900 truncate">
+          {attachment.url.split('/').pop() || typeName}
+        </div>
+        <div className="text-xs text-gray-500">{typeName}</div>
+      </div>
+      <UploadOutlined className="text-gray-400" />
+    </a>
+  );
+};
 
 interface ChatInterfaceProps {
   currentTeacher: Teacher;
@@ -152,6 +218,10 @@ export function ChatInterface({
   const [appointmentTitle, setAppointmentTitle] = useState('');
   const [appointmentDescription, setAppointmentDescription] = useState('');
   
+  // File selection
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
   // Mock data
   const [reminders] = useState<Reminder[]>([
     { id: '1', date: new Date('2025-10-22T14:00:00'), time: '14:00', content: 'Thảo luận phương pháp giảng dạy Toán' },
@@ -170,21 +240,38 @@ export function ChatInterface({
   ]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || isSending) return;
+    if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
     
     setIsSending(true);
     try {
-      const messageData = {
-        content: newMessage,
-        threadId: threadDetail?.thread?._id,
-        recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined
-      };
-
-      const response = await sendMessage(messageData);
+      let response;
+      
+      // If files are selected, use sendMessageWithFile API
+      if (selectedFiles.length > 0) {
+        const fileData = {
+          content: newMessage.trim() || '',
+          threadId: threadDetail?.thread?._id,
+          recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined,
+          files: selectedFiles
+        };
+        response = await sendMessageWithFile(fileData);
+      } else {
+        // Otherwise use regular sendMessage API
+        const messageData = {
+          content: newMessage,
+          threadId: threadDetail?.thread?._id,
+          recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined
+        };
+        response = await sendMessage(messageData);
+      }
       
       if (response.success) {
         const sentContent = newMessage;
         setNewMessage('');
+        setSelectedFiles([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         toast.success(
           language === 'ja' 
             ? 'メッセージを送信しました' 
@@ -348,6 +435,10 @@ export function ChatInterface({
     setMessages([...messages, fileMessage]);
     setUploadModalVisible(false);
     toast.success(language === 'ja' ? 'ファイルをアップロードしました' : 'Đã tải lên tệp tin');
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleCreateAppointment = () => {
@@ -559,19 +650,32 @@ export function ChatInterface({
                       {/* Message Bubble */}
                       <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
                         <div
-                          className={`px-5 py-3 my-2 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
-                            (message.content?.trim().length ?? 0) < 10
-                              ? 'w-[260px] min-h-[44px]'
-                              : 'w-auto'
-                          } ${
-                            isOwnMessage
-                              ? 'bg-blue-50 border-blue-200 text-black'
-                              : 'bg-gray-100 border-gray-200 text-black'
+                          className={`my-2 ${
+                            message.content && message.content.trim()
+                              ? `px-5 py-3 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
+                                  (message.content?.trim().length ?? 0) < 10 && (!message.attachments || message.attachments.length === 0)
+                                    ? 'w-[260px] min-h-[44px]'
+                                    : 'w-auto'
+                                } ${
+                                  isOwnMessage
+                                    ? 'bg-blue-50 border-blue-200 text-black'
+                                    : 'bg-gray-100 border-gray-200 text-black'
+                                }`
+                              : ''
                           }`}
                         >
-                          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
-                            {message.content}
-                          </p>
+                          {message.content && message.content.trim() && (
+                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
+                              {message.content}
+                            </p>
+                          )}
+                          
+                          {/* Render attachments */}
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className={message.content?.trim() ? 'mt-2' : ''}>
+                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5 mt-1.5 px-3">
@@ -638,19 +742,32 @@ export function ChatInterface({
                       {/* Message Bubble */}
                       <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
                         <div
-                          className={`px-5 py-3 my-2 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
-                            (message.content?.trim().length ?? 0) < 10
-                              ? 'w-[260px] min-h-[44px]'
-                              : 'w-auto'
-                          } ${
-                            isOwnMessage
-                              ? 'bg-blue-50 border-blue-200 text-black'
-                              : 'bg-gray-100 border-gray-200 text-black'
+                          className={`my-2 ${
+                            message.content && message.content.trim()
+                              ? `px-5 py-3 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
+                                  (message.content?.trim().length ?? 0) < 10 && (!message.attachments || message.attachments.length === 0)
+                                    ? 'w-[260px] min-h-[44px]'
+                                    : 'w-auto'
+                                } ${
+                                  isOwnMessage
+                                    ? 'bg-blue-50 border-blue-200 text-black'
+                                    : 'bg-gray-100 border-gray-200 text-black'
+                                }`
+                              : ''
                           }`}
                         >
-                          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
-                            {message.content}
-                          </p>
+                          {message.content && message.content.trim() && (
+                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
+                              {message.content}
+                            </p>
+                          )}
+                          
+                          {/* Render attachments */}
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className={message.content?.trim() ? 'mt-2' : ''}>
+                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1.5 mt-1.5 px-3">
@@ -746,12 +863,70 @@ export function ChatInterface({
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 bg-white p-4 flex-shrink-0">
-        <Space.Compact style={{ width: '100%' }} className="rounded-3xl overflow-hidden shadow-sm">
+      <div className="border-t border-gray-200 bg-white flex-shrink-0">
+        {/* File Preview Area */}
+        {selectedFiles.length > 0 && (
+          <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50">
+            <div className="flex flex-wrap gap-2 max-w-4xl mx-auto">
+              {selectedFiles.map((file, index) => {
+                const isImage = file.type.startsWith('image/');
+                if (isImage) {
+                  // Preview for images
+                  const imageUrl = URL.createObjectURL(file);
+                  return (
+                    <div key={index} className="relative group">
+                      <img 
+                        src={imageUrl} 
+                        alt={file.name}
+                        className="w-20 h-20 object-cover rounded-lg border-2 border-blue-200 shadow-sm"
+                      />
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors flex items-center justify-center text-xs font-bold shadow-md opacity-0 group-hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                } else {
+                  // Text display for files
+                  return (
+                    <div key={index} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200 shadow-sm">
+                      <FileOutlined className="text-blue-600" />
+                      <span className="text-sm text-gray-700 max-w-[150px] truncate">{file.name}</span>
+                      <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="ml-1 text-red-500 hover:text-red-700 font-bold"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                }
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="p-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              if (e.target.files) {
+                setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+              }
+            }}
+          />
+          <Space.Compact style={{ width: '100%' }} className="rounded-3xl overflow-hidden shadow-sm">
             <Tooltip title={language === 'ja' ? 'ファイルをアップロード' : 'Tải lên tệp'}>
               <AntButton 
                 icon={<UploadOutlined />} 
-                onClick={() => setUploadModalVisible(true)}
+                onClick={() => fileInputRef.current?.click()}
                 className="h-12 px-4 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200 border-0"
               />
             </Tooltip>
@@ -784,12 +959,13 @@ export function ChatInterface({
               icon={<SendOutlined className="rotate-0 group-hover:rotate-45 transition-transform duration-300" />}
               onClick={handleSendMessage}
               loading={isSending}
-              disabled={!newMessage.trim() || isSending}
+              disabled={(!newMessage.trim() && selectedFiles.length === 0) || isSending}
               className="h-12 px-6 bg-[#0084ff] border-0 hover:bg-[#0073e6] disabled:bg-gray-300 transition-all duration-300 font-medium group"
             >
               {language === 'ja' ? '送信' : 'Gửi'}
             </AntButton>
-        </Space.Compact>
+          </Space.Compact>
+        </div>
       </div>
 
       {/* Upload File Modal */}

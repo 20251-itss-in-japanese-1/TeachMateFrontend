@@ -46,7 +46,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
-import { sendMessage } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -107,6 +107,72 @@ interface GroupMessage extends Message {
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😊', '😂', '🎉', '👏'];
 
+// Helper function to render attachments
+const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number) => {
+  const isImage = attachment.mime.startsWith('image/');
+  const isPDF = attachment.mime === 'application/pdf';
+  const isDoc = attachment.mime.includes('word') || attachment.mime.includes('document');
+  const isPPT = attachment.mime.includes('presentation') || attachment.mime.includes('powerpoint');
+  const isExcel = attachment.mime.includes('sheet') || attachment.mime.includes('excel');
+  
+  if (isImage) {
+    return (
+      <a key={index} href={attachment.url} target="_blank" rel="noopener noreferrer" className="block mt-2">
+        <img 
+          src={attachment.url} 
+          alt="attachment" 
+          className="max-w-xs rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer"
+          style={{ maxHeight: '300px', objectFit: 'cover' }}
+        />
+      </a>
+    );
+  }
+  
+  // For files (PDF, DOCX, PPTX, etc.)
+  let icon = <FileOutlined className="text-blue-600" />;
+  let color = 'blue';
+  let typeName = 'File';
+  
+  if (isPDF) {
+    icon = <FileOutlined className="text-red-600" />;
+    color = 'red';
+    typeName = 'PDF';
+  } else if (isDoc) {
+    icon = <FileOutlined className="text-blue-600" />;
+    color = 'blue';
+    typeName = 'DOCX';
+  } else if (isPPT) {
+    icon = <FileOutlined className="text-orange-600" />;
+    color = 'orange';
+    typeName = 'PPTX';
+  } else if (isExcel) {
+    icon = <FileOutlined className="text-green-600" />;
+    color = 'green';
+    typeName = 'XLSX';
+  }
+  
+  return (
+    <a 
+      key={index}
+      href={attachment.url} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 mt-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+    >
+      <div className={`w-10 h-10 rounded-lg bg-${color}-100 flex items-center justify-center flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900 truncate">
+          {attachment.url.split('/').pop() || typeName}
+        </div>
+        <div className="text-xs text-gray-500">{typeName}</div>
+      </div>
+      <UploadOutlined className="text-gray-400" />
+    </a>
+  );
+};
+
 // Generate avatar colors
 const getAvatarColor = (id: string) => {
   const colors = ['#1890ff', '#52c41a', '#722ed1', '#eb2f96', '#13c2c2', '#fa8c16'];
@@ -135,7 +201,8 @@ export function GroupChatInterface({
   const [showQRModal, setShowQRModal] = useState(false);
 
   // Upload & Appointment Modals
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [appointmentDate, setAppointmentDate] = useState<any>(null);
   const [appointmentTime, setAppointmentTime] = useState('12:00');
@@ -184,26 +251,40 @@ export function GroupChatInterface({
   const [isSending, setIsSending] = useState(false);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || isSending) return;
+    if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
     
     setIsSending(true);
     try {
-      const messageData = {
-        content: newMessage,
-        threadId: threadDetail?.thread?._id || selectedGroup.id
-      };
-
-      const response = await sendMessage(messageData);
+      let response;
+      
+      // If files are selected, use sendMessageWithFile API
+      if (selectedFiles.length > 0) {
+        const fileData = {
+          content: newMessage.trim() || (language === 'ja' ? 'ファイルを共有しました' : 'Đã chia sẻ tệp tin'),
+          threadId: threadDetail?.thread?._id || selectedGroup.id,
+          files: selectedFiles
+        };
+        response = await sendMessageWithFile(fileData);
+      } else {
+        // Otherwise use regular sendMessage API
+        const messageData = {
+          content: newMessage,
+          threadId: threadDetail?.thread?._id || selectedGroup.id
+        };
+        response = await sendMessage(messageData);
+      }
       
       if (response.success) {
         setNewMessage('');
+        setSelectedFiles([]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         toast.success(
-          language === 'ja' 
-            ? 'メッセージを送信しました' 
+          language === 'ja'
+            ? 'メッセージを送信しました'
             : 'Đã gửi tin nhắn'
-        );
-        
-        // The useChat hook will automatically refetch
+        );        // The useChat hook will automatically refetch
       }
     } catch (error: any) {
       console.error('Failed to send message:', error);
@@ -386,22 +467,8 @@ export function GroupChatInterface({
     }
   ];
 
-  const handleUploadFile = () => {
-    const fileMessage: GroupMessage = {
-      id: Date.now().toString(),
-      senderId: currentUser.id,
-      receiverId: selectedGroup.id,
-      content: language === 'ja' ? 'ファイルを共有しました' : 'Đã chia sẻ tệp tin',
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
-      timestamp: new Date(),
-      type: 'slide',
-      slideUrl: 'example-file.pdf'
-    };
-
-    setMessages([...messages, fileMessage]);
-    setUploadModalVisible(false);
-    toast.success(language === 'ja' ? 'ファイルをアップロードしました' : 'Đã tải lên tệp tin');
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleCreateAppointment = () => {
@@ -639,7 +706,33 @@ export function GroupChatInterface({
       </div>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
+        <style>
+          {`
+            .custom-scrollbar {
+              scrollbar-width: thin;
+              scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+            }
+            
+            .custom-scrollbar::-webkit-scrollbar {
+              width: 6px;
+            }
+            
+            .custom-scrollbar::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            
+            .custom-scrollbar::-webkit-scrollbar-thumb {
+              background-color: rgba(156, 163, 175, 0.3);
+              border-radius: 20px;
+              transition: background-color 0.2s;
+            }
+            
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+              background-color: rgba(156, 163, 175, 0.5);
+            }
+          `}
+        </style>
         {isLoadingMessages ? (
           <div className="flex justify-center items-center h-full">
             <div className="text-center">
@@ -692,15 +785,26 @@ export function GroupChatInterface({
                     )}
 
                     <div
-                      className={`px-4 py-2.5 shadow-sm ${
-                        isOwnMessage
-                          ? 'bg-blue-600 text-white rounded-[20px] rounded-tr-md'
-                          : 'bg-gray-200 text-gray-900 rounded-[20px] rounded-tl-md'
+                      className={`${
+                        message.content && message.content.trim()
+                          ? `px-4 py-2.5 shadow-sm ${
+                              isOwnMessage
+                                ? 'bg-blue-600 text-white rounded-[20px] rounded-tr-md'
+                                : 'bg-gray-200 text-gray-900 rounded-[20px] rounded-tl-md'
+                            }`
+                          : ''
                       }`}
                     >
-                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                        {message.content}
-                      </p>
+                      {message.content && message.content.trim() && (
+                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                      )}
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className={`space-y-1 ${message.content?.trim() ? 'mt-2' : ''}`}>
+                          {message.attachments.map((attachment: any, idx: number) => renderAttachment(attachment, idx))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 mt-1 px-2">
@@ -745,26 +849,77 @@ export function GroupChatInterface({
             </div>
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Message Input */}
-      <div className="p-4 bg-white border-t border-gray-200">
-        <div className="flex gap-2 items-end max-w-4xl mx-auto">
-          <div className="flex gap-2">
-            <Tooltip title={language === 'ja' ? '写真' : 'Ảnh'}>
-              <AntButton
-                icon={<PictureOutlined />}
-                onClick={handleFileUpload}
-                className="border-blue-300 text-blue-600 hover:bg-blue-50"
-              />
-            </Tooltip>
-            <Tooltip title={language === 'ja' ? 'ファイル' : 'File'}>
-              <AntButton
-                icon={<UploadOutlined />}
-                onClick={() => setUploadModalVisible(true)}
-                className="border-blue-300 text-blue-600 hover:bg-blue-50"
-              />
-            </Tooltip>
+      <div className="bg-white border-t border-gray-200 flex-shrink-0">
+        {/* File Preview Area */}
+        {selectedFiles.length > 0 && (
+          <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50">
+            <div className="flex flex-wrap gap-2 max-w-4xl mx-auto">
+              {selectedFiles.map((file, index) => {
+                const isImage = file.type.startsWith('image/');
+                if (isImage) {
+                  // Preview for images
+                  const imageUrl = URL.createObjectURL(file);
+                  return (
+                    <div key={index} className="relative group">
+                      <img 
+                        src={imageUrl} 
+                        alt={file.name}
+                        className="w-20 h-20 object-cover rounded-lg border-2 border-blue-200 shadow-sm"
+                      />
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors flex items-center justify-center text-xs font-bold shadow-md opacity-0 group-hover:opacity-100"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                } else {
+                  // Text display for files
+                  return (
+                    <div key={index} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200 shadow-sm">
+                      <FileOutlined className="text-blue-600" />
+                      <span className="text-sm text-gray-700 max-w-[150px] truncate">{file.name}</span>
+                      <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                      <button
+                        onClick={() => handleRemoveFile(index)}
+                        className="ml-1 text-red-500 hover:text-red-700 font-bold"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                }
+              })}
+            </div>
+          </div>
+        )}
+        
+        <div className="p-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png,.gif,.jpeg,.zip"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              if (e.target.files) {
+                setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+              }
+            }}
+          />
+          <div className="flex gap-2 items-end max-w-4xl mx-auto">
+            <div className="flex gap-2">
+              <Tooltip title={language === 'ja' ? 'ファイル' : 'File'}>
+                <AntButton
+                  icon={<UploadOutlined />}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                />
+              </Tooltip>
             <Tooltip title={language === 'ja' ? '予定を設定' : 'Đặt lịch hẹn'}>
               <AntButton
                 icon={<CalendarOutlined />}
@@ -779,69 +934,36 @@ export function GroupChatInterface({
                 className="border-blue-300 text-blue-600 hover:bg-blue-50"
               />
             </Tooltip>
+            </div>
+
+            <TextArea
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onPressEnter={(e) => {
+                if (!e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder={language === 'ja' ? 'メッセージを入力...' : 'Nhập tin nhắn...'}
+              autoSize={{ minRows: 1, maxRows: 4 }}
+              className="flex-1 border-blue-300 focus:border-blue-500"
+              disabled={isSending}
+            />
+
+            <AntButton
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleSendMessage}
+              disabled={(!newMessage.trim() && selectedFiles.length === 0) || isSending}
+              loading={isSending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {language === 'ja' ? '送信' : 'Gửi'}
+            </AntButton>
           </div>
-
-          <TextArea
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onPressEnter={(e) => {
-              if (!e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            placeholder={language === 'ja' ? 'メッセージを入力...' : 'Nhập tin nhắn...'}
-            autoSize={{ minRows: 1, maxRows: 4 }}
-            className="flex-1 border-blue-300 focus:border-blue-500"
-            disabled={isSending}
-          />
-
-          <AntButton
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSendMessage}
-            disabled={!newMessage.trim() || isSending}
-            loading={isSending}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {language === 'ja' ? '送信' : 'Gửi'}
-          </AntButton>
         </div>
       </div>
-
-      {/* Upload File Modal */}
-      <Modal
-        title={
-          <Space>
-            <UploadOutlined />
-            <Text strong>{language === 'ja' ? 'ファイルをアップロード' : 'Tải lên tệp tin'}</Text>
-          </Space>
-        }
-        open={uploadModalVisible}
-        onCancel={() => setUploadModalVisible(false)}
-        onOk={handleUploadFile}
-        okText={language === 'ja' ? 'アップロード' : 'Tải lên'}
-        cancelText={language === 'ja' ? 'キャンセル' : 'Hủy'}
-        centered
-      >
-        <div className="py-4">
-          <Text className="block mb-3 text-gray-600">
-            {language === 'ja'
-              ? 'グループメンバーとファイルを共有'
-              : 'Chia sẻ tệp với thành viên nhóm'}
-          </Text>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.png,.zip"
-            className="w-full p-2 border border-gray-300 rounded"
-          />
-          <Text type="secondary" className="text-xs block mt-2">
-            {language === 'ja'
-              ? '対応形式: PDF, Word, PowerPoint, 画像, ZIP (最大25MB)'
-              : 'Định dạng: PDF, Word, PowerPoint, Ảnh, ZIP (Tối đa 25MB)'}
-          </Text>
-        </div>
-      </Modal>
 
       {/* Create Appointment Modal */}
       <Modal

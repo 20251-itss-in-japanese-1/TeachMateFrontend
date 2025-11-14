@@ -9,7 +9,11 @@ export interface Message {
     };
     content: string;
     contentType: string;
-    attachments?: string[];
+    attachments?: {
+        kind: string;
+        mime: string;
+        url: string;
+    }[];
     scheduleId?: string;
     pollId?: string;
     reactions?: string[];
@@ -26,4 +30,5 @@ export interface Message {
 export interface MessagesResponse {
     success: boolean;
     message: string;
+    data: Message[];
 }
