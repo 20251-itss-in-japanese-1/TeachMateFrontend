@@ -535,11 +535,14 @@ export function GroupChatInterface({
     try {
       const threadId = threadDetail?.thread?._id || selectedGroup.id;
       const userId = (currentUser as any).id || (currentUser as any)._id;
+      // Send date in ISO (YYYY-MM-DD) and include startAt ISO datetime to avoid "Invalid Date"
+      const dateIso = appointmentDate.format('YYYY-MM-DD');
       const payload = {
         title: appointmentTitle,
         description: appointmentDescription || undefined,
-        date: appointmentDate.format('DD/MM/YYYY'),
+        date: dateIso,        // ISO date
         time: appointmentTime,
+        startAt: startAtIso,  // ISO datetime
         threadId,
         userId
       };
