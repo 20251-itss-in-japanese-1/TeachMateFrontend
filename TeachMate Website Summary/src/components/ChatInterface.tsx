@@ -34,7 +34,9 @@ import {
   WarningOutlined,
   DeleteOutlined,
   SearchOutlined,
-  UserAddOutlined
+  UserAddOutlined,
+  DownloadOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -51,7 +53,7 @@ const { TextArea } = AntInput;
 const { Text, Title } = Typography;
 
 // Helper function to render attachments
-const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number) => {
+const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number, setImageModalVisible: (visible: boolean) => void, setSelectedImage: (url: string) => void) => {
   const isImage = attachment.mime.startsWith('image/');
   const isPDF = attachment.mime === 'application/pdf';
   const isDoc = attachment.mime.includes('word') || attachment.mime.includes('document');
@@ -60,14 +62,47 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
   
   if (isImage) {
     return (
-      <a key={index} href={attachment.url} target="_blank" rel="noopener noreferrer" className="block mt-2">
-        <img 
-          src={attachment.url} 
-          alt="attachment" 
-          className="max-w-xs rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer"
-          style={{ maxHeight: '300px', objectFit: 'cover' }}
-        />
-      </a>
+      <div key={index} className="mt-2 inline-block relative group">
+        <div 
+          onClick={() => {
+            setSelectedImage(attachment.url);
+            setImageModalVisible(true);
+          }}
+          className="cursor-pointer relative"
+        >
+          <img 
+            src={attachment.url} 
+            alt="attachment" 
+            className="max-w-xs rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            style={{ maxHeight: '300px', objectFit: 'cover' }}
+          />
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const response = await fetch(attachment.url);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = attachment.url.split('/').pop() || 'image.jpg';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+              } catch (error) {
+                console.error('Download failed:', error);
+                // Fallback: open in new tab
+                window.open(attachment.url, '_blank');
+              }
+            }}
+            className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+            title="Download"
+          >
+            <DownloadOutlined className="text-gray-700 text-sm" />
+          </button>
+        </div>
+      </div>
     );
   }
   
@@ -95,13 +130,7 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
   }
   
   return (
-    <a 
-      key={index}
-      href={attachment.url} 
-      target="_blank" 
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 mt-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
-    >
+    <div key={index} className="flex items-center gap-2 mt-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 group">
       <div className={`w-10 h-10 rounded-lg bg-${color}-100 flex items-center justify-center flex-shrink-0`}>
         {icon}
       </div>
@@ -111,8 +140,26 @@ const renderAttachment = (attachment: { kind: string; mime: string; url: string 
         </div>
         <div className="text-xs text-gray-500">{typeName}</div>
       </div>
-      <UploadOutlined className="text-gray-400" />
-    </a>
+      <div className="flex items-center gap-2">
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-700 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <EyeOutlined className="text-lg" />
+        </a>
+        <a
+          href={attachment.url}
+          download
+          className="text-green-600 hover:text-green-700 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DownloadOutlined className="text-lg" />
+        </a>
+      </div>
+    </div>
   );
 };
 
@@ -198,6 +245,8 @@ export function ChatInterface({
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<{ id: string; content: string; createdAt: Date }[]>([]);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState('');
 
   // Auto-scroll to bottom when messages update or optimistic messages added
   React.useEffect(() => {
@@ -673,7 +722,7 @@ export function ChatInterface({
                           {/* Render attachments */}
                           {message.attachments && message.attachments.length > 0 && (
                             <div className={message.content?.trim() ? 'mt-2' : ''}>
-                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx))}
+                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
                             </div>
                           )}
                         </div>
@@ -765,7 +814,7 @@ export function ChatInterface({
                           {/* Render attachments */}
                           {message.attachments && message.attachments.length > 0 && (
                             <div className={message.content?.trim() ? 'mt-2' : ''}>
-                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx))}
+                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
                             </div>
                           )}
                         </div>
@@ -1335,6 +1384,39 @@ export function ChatInterface({
           </Panel>
         </Collapse>
       </Drawer>
+
+      {/* Image Modal */}
+      <Modal
+        open={imageModalVisible}
+        onCancel={() => setImageModalVisible(false)}
+        footer={[
+          <AntButton
+            key="download"
+            type="primary"
+            icon={<DownloadOutlined />}
+            href={selectedImage}
+            download
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {language === 'ja' ? 'ダウンロード' : 'Tải xuống'}
+          </AntButton>,
+          <AntButton key="close" onClick={() => setImageModalVisible(false)}>
+            {language === 'ja' ? '閉じる' : 'Đóng'}
+          </AntButton>
+        ]}
+        width="auto"
+        centered
+        className="image-preview-modal"
+      >
+        <div className="flex justify-center items-center p-4">
+          <img 
+            src={selectedImage} 
+            alt="Preview" 
+            style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
+            className="rounded-lg"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }
