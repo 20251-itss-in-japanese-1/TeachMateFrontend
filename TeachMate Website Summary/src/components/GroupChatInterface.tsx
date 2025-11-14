@@ -48,7 +48,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
-import { sendMessage, sendMessageWithFile, createSchedule, createPoll } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -238,6 +238,12 @@ export function GroupChatInterface({
   const t = translations[language];
   const [creatingPoll, setCreatingPoll] = useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  // Real members / events / polls loaded from thread or backend
+  const [groupMembers, setGroupMembers] = useState<Teacher[]>([]); // will populate from threadDetail
+  const [groupEvents, setGroupEvents] = useState<GroupEvent[]>([]); // schedules from backend
+  const [groupPolls, setGroupPolls] = useState<GroupPoll[]>([]); // polls from backend
+  // Shared media (images/files/links) referenced in the UI
+  const [sharedMedia, setSharedMedia] = useState<SharedMedia[]>([]);
   const [infoDrawerVisible, setInfoDrawerVisible] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [tempGroupName, setTempGroupName] = useState(selectedGroup.name);
@@ -353,169 +359,79 @@ export function GroupChatInterface({
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([]);
 
-  // Mock data for group info
-  const [groupEvents] = useState<GroupEvent[]>([
-    {
-      id: '1',
-      title: language === 'ja' ? 'オンラインミーティング' : 'Họp trực tuyến',
-      date: new Date('2025-10-25T15:00:00'),
-      time: '15:00',
-      description: language === 'ja' ? '教育方法についての討論' : 'Thảo luận về phương pháp giảng dạy'
-    },
-    {
-      id: '2',
-      title: language === 'ja' ? '資料共有セッション' : 'Chia sẻ tài liệu',
-      date: new Date('2025-10-28T10:00:00'),
-      time: '10:00',
-      description: language === 'ja' ? '新しい教材の紹介' : 'Giới thiệu tài liệu mới'
-    }
-  ]);
-
-  const [groupPolls] = useState<GroupPoll[]>([
-    {
-      id: '1',
-      question: language === 'ja' ? '次回のミーティング時間は?' : 'Thời gian họp tiếp theo?',
-      options: [
-        { text: language === 'ja' ? '月曜日 14:00' : 'Thứ 2 14:00', votes: 12, voters: ['user1', 'user2'] },
-        { text: language === 'ja' ? '水曜日 15:00' : 'Thứ 4 15:00', votes: 8, voters: ['user3'] },
-        { text: language === 'ja' ? '金曜日 16:00' : 'Thứ 6 16:00', votes: 15, voters: ['user4', 'user5'] }
-      ],
-      totalVotes: 35,
-      createdBy: 'Yuki Tanaka',
-      createdAt: new Date('2025-10-20T10:00:00')
-    }
-  ]);
-
-  const [sharedMedia] = useState<SharedMedia[]>([
-    {
-      id: '1',
-      type: 'image',
-      name: 'teaching_methodology.jpg',
-      url: '#',
-      uploadedBy: 'Yuki Tanaka',
-      date: new Date('2025-10-15')
-    },
-    {
-      id: '2',
-      type: 'file',
-      name: 'lesson_plan_template.pdf',
-      url: '#',
-      uploadedBy: 'Linh Nguyen',
-      date: new Date('2025-10-18')
-    },
-    {
-      id: '3',
-      type: 'file',
-      name: 'curriculum_guide.docx',
-      url: '#',
-      uploadedBy: 'Hiroshi Yamamoto',
-      date: new Date('2025-10-19')
-    },
-    {
-      id: '4',
-      type: 'link',
-      name: 'Educational Resources Hub',
-      url: 'https://example.com/resources',
-      uploadedBy: 'Mai Pham',
-      date: new Date('2025-10-20')
-    }
-  ]);
-
-  // Mock members data
-  const groupMembers: Teacher[] = [
-    {
-      id: 'member1',
-      name: 'Yuki Tanaka',
-      nationality: 'Japanese',
-      avatar: 'https://images.unsplash.com/photo-1594256347468-5cd43df8fbaf?w=400',
-      specialties: ['Mathematics'],
-      experience: 8,
-      interests: ['Technology'],
-      bio: '',
-      subjects: ['Math']
-    },
-    {
-      id: 'member2',
-      name: 'Linh Nguyen',
-      nationality: 'Vietnamese',
-      avatar: 'https://images.unsplash.com/photo-1740153204511-731e4c619b80?w=400',
-      specialties: ['English'],
-      experience: 6,
-      interests: ['Language'],
-      bio: '',
-      subjects: ['English']
-    },
-    {
-      id: 'member3',
-      name: 'Hiroshi Yamamoto',
-      nationality: 'Japanese',
-      avatar: 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-      specialties: ['History'],
-      experience: 12,
-      interests: ['Culture'],
-      bio: '',
-      subjects: ['History']
-    },
-    {
-      id: 'member4',
-      name: 'Mai Pham',
-      nationality: 'Vietnamese',
-      avatar: 'https://images.unsplash.com/photo-1758781784881-d9fdcdf80d1a?w=400',
-      specialties: ['Art'],
-      experience: 5,
-      interests: ['Creative'],
-      bio: '',
-      subjects: ['Art']
-    }
+  // Optional: keep small fallback mock if APIs return nothing (kept minimal)
+  const fallbackEvents: GroupEvent[] = [
+    { id: '1', title: language === 'ja' ? 'オンラインミーティング' : 'Họp trực tuyến', date: new Date('2025-10-25T15:00:00'), time: '15:00', description: language === 'ja' ? '教育方法についての討論' : 'Thảo luận về phương pháp giảng dạy' }
+  ];
+  const fallbackPolls: GroupPoll[] = [
+    { id: '1', question: language === 'ja' ? '次回のミーティング時間は?' : 'Thời gian họp tiếp theo?', options: [{ text: language === 'ja' ? '月曜日 14:00' : 'Thứ 2 14:00', votes: 12, voters: ['user1', 'user2'] }], totalVotes: 12, createdBy: 'Yuki Tanaka', createdAt: new Date() }
   ];
 
-  // Available teachers to add (not in group yet)
-  const availableTeachers: Teacher[] = [
-    {
-      id: '5',
-      name: 'Kenji Sato',
-      nationality: 'Japanese',
-      avatar: 'https://images.unsplash.com/photo-1594256347468-5cd43df8fbaf?w=400',
-      specialties: ['Physics', 'Science'],
-      experience: 10,
-      interests: ['Experimental Learning'],
-      bio: '',
-      subjects: ['Physics', 'Chemistry']
-    },
-    {
-      id: '6',
-      name: 'Trang Le',
-      nationality: 'Vietnamese',
-      avatar: 'https://images.unsplash.com/photo-1740153204511-731e4c619b80?w=400',
-      specialties: ['Music', 'Performing Arts'],
-      experience: 7,
-      interests: ['Music Theory'],
-      bio: '',
-      subjects: ['Music', 'Arts']
-    },
-    {
-      id: '7',
-      name: 'Sakura Ishikawa',
-      nationality: 'Japanese',
-      avatar: 'https://images.unsplash.com/photo-1594256347468-5cd43df8fbaf?w=400',
-      specialties: ['Biology', 'Environmental Science'],
-      experience: 9,
-      interests: ['Ecology'],
-      bio: '',
-      subjects: ['Biology', 'Environmental Science']
-    },
-    {
-      id: '8',
-      name: 'Hung Tran',
-      nationality: 'Vietnamese',
-      avatar: 'https://images.unsplash.com/photo-1664382951771-40432ecc81bd?w=400',
-      specialties: ['Computer Science', 'Programming'],
-      experience: 4,
-      interests: ['Coding Education'],
-      bio: '',
-      subjects: ['Computer Science', 'Technology']
+  // Populate members/events/polls when threadDetail changes
+  React.useEffect(() => {
+    const threadId = threadDetail?.thread?._id || selectedGroup.id;
+    // members
+    if (threadDetail?.thread?.members) {
+      const mapped = (threadDetail.thread.members || []).map((m: any) => ({
+        id: m.userId?._id || m._id || m.id,
+        name: m.userId?.name || m.name || 'Unknown',
+        nationality: m.userId?.nationality || 'Japanese',
+        avatar: m.userId?.avatarUrl || m.avatar || '',
+        specialties: m.userId?.specialties || [''],
+        experience: m.userId?.experience || 0,
+        interests: m.userId?.interests || [],
+        bio: m.userId?.bio || '',
+        subjects: m.userId?.subjects || []
+      }));
+      setGroupMembers(mapped);
     }
-  ];
+
+    // fetch schedules for this thread
+    (async () => {
+      try {
+        const res = await getThreadSchedules(threadId);
+        if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+          // Map backend schedule shape to GroupEvent if necessary
+          const mappedEvents = res.data.map((s: any) => ({
+            id: s._id || s.id,
+            title: s.title,
+            date: s.startAt ? new Date(s.startAt) : (s.date ? new Date(s.date) : new Date()),
+            time: s.time || (s.startAt ? new Date(s.startAt).toISOString().substr(11,5) : '00:00'),
+            description: s.description || ''
+          }));
+          setGroupEvents(mappedEvents);
+        } else {
+          setGroupEvents(fallbackEvents);
+        }
+      } catch (err) {
+        console.error('getThreadSchedules failed', err);
+        setGroupEvents(fallbackEvents);
+      }
+    })();
+
+    // fetch polls for this thread
+    (async () => {
+      try {
+        const res = await getThreadPolls(threadId);
+        if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+          const mappedPolls = res.data.map((p: any) => ({
+            id: p._id || p.id,
+            question: p.question,
+            options: (p.options || []).map((o: any) => ({ text: o.text, votes: o.votes || 0, voters: o.voters || [] })),
+            totalVotes: p.totalVotes || (p.options || []).reduce((acc: number, o: any) => acc + (o.votes || 0), 0),
+            createdBy: p.createdBy?.name || p.createdBy || '',
+            createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+          }));
+          setGroupPolls(mappedPolls);
+        } else {
+          setGroupPolls(fallbackPolls);
+        }
+      } catch (err) {
+        console.error('getThreadPolls failed', err);
+        setGroupPolls(fallbackPolls);
+      }
+    })();
+  }, [threadDetail, selectedGroup.id, language]);
 
   const handleRemoveFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
@@ -740,9 +656,13 @@ export function GroupChatInterface({
     );
   };
 
+  // Placeholder list of available teachers to add.
+  // Replace this with your real data source or fetch logic as needed.
+  const availableTeachers: Teacher[] = [];
+
   const filteredAvailableTeachers = availableTeachers.filter(teacher =>
     teacher.name.toLowerCase().includes(searchMemberQuery.toLowerCase()) ||
-    teacher.specialties.some(s => s.toLowerCase().includes(searchMemberQuery.toLowerCase()))
+    (teacher.specialties || []).some(s => s.toLowerCase().includes(searchMemberQuery.toLowerCase()))
   );
 
   const groupMenuItems = [
@@ -1408,7 +1328,7 @@ export function GroupChatInterface({
                       </AntAvatar>
                     }
                     title={member.name}
-                    description={member.specialties[0]}
+                    description={member.specialties && member.specialties.length ? member.specialties[0] : ''}
                   />
                 </List.Item>
               )}
@@ -1448,7 +1368,7 @@ export function GroupChatInterface({
             >
               {language === 'ja' ? '新しい予定を作成' : 'Tạo lịch hẹn mới'}
             </AntButton>
-
+ 
             {groupEvents.length === 0 ? (
               <Empty description={language === 'ja' ? 'イベントなし' : 'Chưa có sự kiện'} />
             ) : (
@@ -1496,7 +1416,7 @@ export function GroupChatInterface({
             >
               {language === 'ja' ? '新しいアンケートを作成' : 'Tạo bình chọn mới'}
             </AntButton>
-
+ 
             {groupPolls.length === 0 ? (
               <Empty description={language === 'ja' ? 'アンケートなし' : 'Chưa có bình chọn'} />
             ) : (
@@ -1511,7 +1431,7 @@ export function GroupChatInterface({
                           <Text className="text-sm text-gray-500">{option.votes} {language === 'ja' ? '票' : 'phiếu'}</Text>
                         </div>
                         <Progress
-                          percent={Math.round((option.votes / poll.totalVotes) * 100)}
+                          percent={poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0}
                           size="small"
                           strokeColor="#1890ff"
                         />
@@ -1524,7 +1444,7 @@ export function GroupChatInterface({
                 </div>
               ))
             )}
-          </Panel>
+           </Panel>
 
           {/* Shared Media */}
           <Panel

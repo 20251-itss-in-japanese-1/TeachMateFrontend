@@ -67,6 +67,16 @@ export async function createSchedule(request: CreateScheduleRequest) {
     return res.then(r => r.data);
 }
 
+/**
+ * Get schedules for a thread.
+ * Backend route: GET /schedule?threadId=...
+ * Returns ScheduleResponse where data is expected to be an array of schedules.
+ */
+export async function getThreadSchedules(threadId: string) {
+    const res = Http.get<ScheduleResponse>(`/schedule?threadId=${encodeURIComponent(threadId)}`);
+    return res.then(r => r.data);
+}
+
 // --- Poll API ---
 export interface CreatePollRequest {
   threadId: string;
