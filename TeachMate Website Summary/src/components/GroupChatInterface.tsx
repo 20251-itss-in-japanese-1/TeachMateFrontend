@@ -48,7 +48,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
-import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -248,6 +248,8 @@ export function GroupChatInterface({
 }: GroupChatInterfaceProps) {
   const t = translations[language];
   const [creatingPoll, setCreatingPoll] = useState(false);
+  const [voting, setVoting] = useState(false);
+  const [votingPollId, setVotingPollId] = useState<string | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   // Real members / events / polls loaded from thread or backend
   const [groupMembers, setGroupMembers] = useState<Teacher[]>([]); // will populate from threadDetail
@@ -420,29 +422,59 @@ export function GroupChatInterface({
       }
     })();
 
-    // fetch polls for this thread
-    (async () => {
-      try {
-        const res = await getThreadPolls(threadId);
-        if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
-          const mappedPolls = res.data.map((p: any) => ({
-            id: p._id || p.id,
-            question: p.question,
-            options: (p.options || []).map((o: any) => ({ text: o.text, votes: o.votes || 0, voters: o.voters || [] })),
-            totalVotes: p.totalVotes || (p.options || []).reduce((acc: number, o: any) => acc + (o.votes || 0), 0),
-            createdBy: p.createdBy?.name || p.createdBy || '',
-            createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-          }));
-          setGroupPolls(mappedPolls);
-        } else {
-          setGroupPolls(fallbackPolls);
-        }
-      } catch (err) {
-        console.error('getThreadPolls failed', err);
+    // fetch polls for this thread (use helper below)
+    fetchPolls(threadId).catch(e => console.error('fetchPolls failed', e));
+  }, [threadDetail, selectedGroup.id, language]);
+
+  // helper: fetch polls and set state
+  const fetchPolls = async (threadId: string) => {
+    try {
+      const res = await getThreadPolls(threadId);
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+        const mappedPolls = res.data.map((p: any) => ({
+          id: p._id || p.id,
+          question: p.question,
+          options: (p.options || []).map((o: any) => ({ text: o.text, votes: o.votes || 0, voters: o.voters || [] })),
+          totalVotes: p.totalVotes || (p.options || []).reduce((acc: number, o: any) => acc + (o.votes || 0), 0),
+          createdBy: p.createdBy?.name || p.createdBy || '',
+          createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+        }));
+        setGroupPolls(mappedPolls);
+      } else {
         setGroupPolls(fallbackPolls);
       }
-    })();
-  }, [threadDetail, selectedGroup.id, language]);
+    } catch (err) {
+      console.error('getThreadPolls failed', err);
+      setGroupPolls(fallbackPolls);
+    }
+  };
+
+  // Vote handler: call votePoll then refresh polls + thread messages
+  const handleVote = async (pollId: string, optionIndex: number) => {
+    if (voting) return;
+    setVoting(true);
+    setVotingPollId(pollId);
+    const threadId = threadDetail?.thread?._id || selectedGroup.id;
+    try {
+      const res = await votePoll(pollId, optionIndex);
+      if (res?.success) {
+        toast.success(language === 'ja' ? '投票しました' : 'Đã bỏ phiếu');
+        // refresh polls and thread messages
+        await fetchPolls(threadId);
+        if (onRefreshThread) {
+          try { await onRefreshThread(); } catch (e) { /* ignore */ }
+        }
+      } else {
+        toast.error(res?.message || (language === 'ja' ? '投票に失敗しました' : 'Bỏ phiếu thất bại'));
+      }
+    } catch (err) {
+      console.error('votePoll failed', err);
+      toast.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+    } finally {
+      setVoting(false);
+      setVotingPollId(null);
+    }
+  };
 
   const handleRemoveFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
@@ -1435,19 +1467,41 @@ export function GroupChatInterface({
                 <div key={poll.id} className="mb-4 p-3 bg-gray-50 rounded">
                   <Text strong className="block mb-2">{poll.question}</Text>
                   <Space direction="vertical" style={{ width: '100%' }}>
-                    {poll.options.map((option, index) => (
-                      <div key={index}>
-                        <div className="flex justify-between items-center mb-1">
-                          <Text className="text-sm">{option.text}</Text>
-                          <Text className="text-sm text-gray-500">{option.votes} {language === 'ja' ? '票' : 'phiếu'}</Text>
+                    {poll.options.map((option, index) => {
+                      const votedByMe = Array.isArray(option.voters) && option.voters.includes(currentUser.id);
+                      const percent = poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
+                      return (
+                        <div key={index} className="flex items-center justify-between gap-3 p-2 rounded">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <Text className="text-sm">{option.text}</Text>
+                              <Text className="text-sm text-gray-500">{option.votes} {language === 'ja' ? '票' : 'phiếu'}</Text>
+                            </div>
+                            <Progress
+                              percent={percent}
+                              size="small"
+                              strokeColor="#1890ff"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="ml-3">
+                            {votedByMe ? (
+                              <AntButton type="default" disabled>
+                                {language === 'ja' ? '投票済み' : 'Đã bỏ phiếu'}
+                              </AntButton>
+                            ) : (
+                              <AntButton
+                                type="primary"
+                                onClick={() => handleVote(poll.id, index)}
+                                loading={voting && votingPollId === poll.id}
+                              >
+                                {language === 'ja' ? '投票' : 'Bầu'}
+                              </AntButton>
+                            )}
+                          </div>
                         </div>
-                        <Progress
-                          percent={poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0}
-                          size="small"
-                          strokeColor="#1890ff"
-                        />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </Space>
                   <Text type="secondary" className="text-xs block mt-2">
                     {language === 'ja' ? '作成者' : 'Tạo bởi'}: {poll.createdBy} • {dayjs(poll.createdAt).format('DD/MM/YYYY')}
