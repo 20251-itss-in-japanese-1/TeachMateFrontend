@@ -6,6 +6,7 @@ import { mapUserToTeacher, mapFriendListData, mapFriendRequestData, mapThreadDat
 import { useThreads } from '../hooks/useThreads';
 import { useNotifications } from '../hooks/useNoti';
 import { useFriendList, useFriendRequests } from '../hooks/useFriend';
+import { getTokenFromLocalStorage, removeTokenFromLocalStorage } from '../apis/localtoken';
 
 interface FriendRequest {
   id: string;
@@ -97,7 +98,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   // Initialize authentication
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
+      const token = getTokenFromLocalStorage();
       if (token) {
         try {
           const response = await getUserProfile();
@@ -107,11 +108,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             setCurrentUser(user);
             setIsAuthenticated(true);
           } else {
-            localStorage.removeItem('token');
+            removeTokenFromLocalStorage();
           }
         } catch (error) {
           console.error('Failed to fetch user profile:', error);
-          localStorage.removeItem('token');
+          removeTokenFromLocalStorage();
         }
       }
       setIsLoading(false);

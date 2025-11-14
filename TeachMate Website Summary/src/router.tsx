@@ -47,10 +47,36 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
   return <>{children}</>;
 };
 
+// Login Route wrapper - redirect to home if already authenticated
+const LoginRoute = () => {
+  const { isAuthenticated, isAdmin, isLoading } = useAppContext();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If already authenticated, redirect to appropriate page
+  if (isAuthenticated) {
+    if (isAdmin) {
+      return <Navigate to="/admin" replace />;
+    }
+    return <Navigate to="/" replace />;
+  }
+
+  return <LoginPage />;
+};
+
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <LoginPage />,
+    element: <LoginRoute />,
   },
   {
     path: '/admin',

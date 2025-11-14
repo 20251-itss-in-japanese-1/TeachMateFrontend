@@ -15,6 +15,7 @@ import { Teacher } from '../types';
 import { toast } from 'sonner';
 import { acceptFriendRequest, rejectFriendRequest, sendFriendRequest } from '../apis/friend.api';
 import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
+import { removeTokenFromLocalStorage } from '../apis/localtoken';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
 
@@ -92,7 +93,7 @@ export const MainLayout: React.FC = () => {
     setIsAuthenticated(false);
     setIsAdmin(false);
     setCurrentUser(null);
-    localStorage.removeItem('token');
+    removeTokenFromLocalStorage();
     navigate('/login');
   };
 

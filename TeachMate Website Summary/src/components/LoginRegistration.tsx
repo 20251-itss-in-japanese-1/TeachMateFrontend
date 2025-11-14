@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { translations, Language } from '../translations';
 import { GraduationCap } from 'lucide-react';
 import { login, register } from '../apis/auth.api';
+import { saveTokenToLocalStorage, removeTokenFromLocalStorage } from '../apis/localtoken';
 
 const ADMIN_CREDENTIALS = {
   username: "admin@gmail.com",
@@ -42,38 +43,41 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
     const token = urlParams.get('token');
     
     if (token) {
-      // Clear the token from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-      
       // Handle login with token
       handleOAuthCallback(token);
+      
+      // Clear the token from URL after processing
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
   const handleOAuthCallback = async (token: string) => {
     setIsLoading(true);
+    setError('');
+    
     try {
-      // Save token to localStorage
-      localStorage.setItem('token', token);
+      // Save token to localStorage first
+      saveTokenToLocalStorage(token);
       
-      // Fetch user profile from API
+      // Fetch user profile from API using the token
       const { getUserProfile } = await import('../apis/user.api');
       const response = await getUserProfile();
       
-      if (response.success) {
+      if (response.success && response.data) {
         const userData = response.data;
+        // Call onLogin with user data and token
         await onLogin({
           name: userData.name || userData.email.split('@')[0],
           email: userData.email,
-          nationality: userData.nationality || 'Japanese'
+          nationality: (userData.nationality as 'Japanese' | 'Vietnamese') || 'Japanese'
         }, token);
       } else {
         throw new Error('Failed to fetch user profile');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('OAuth callback error:', error);
-      setError('Failed to complete social login');
-      localStorage.removeItem('token');
+      setError(error.response?.data?.message || 'Failed to complete social login. Please try again.');
+      removeTokenFromLocalStorage();
     } finally {
       setIsLoading(false);
     }
@@ -150,11 +154,16 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
   };
 
   const handleSocialLogin = (provider: 'google' | 'facebook') => {
+    setIsLoading(true);
+    setError('');
+    
     if (provider === 'google') {
       // Redirect to backend Google OAuth endpoint
+      // Backend will redirect back to https://teach-mate-frontend.vercel.app/?token=${token}
       window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/google';
     } else if (provider === 'facebook') {
       // Redirect to backend Facebook OAuth endpoint
+      // Backend will redirect back to https://teach-mate-frontend.vercel.app/?token=${token}
       window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/facebook';
     }
   };

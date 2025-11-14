@@ -6,6 +6,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { getUserProfile } from '../apis/user.api';
 import { mapUserToTeacher } from '../utils/mappers';
 import { toast } from 'sonner';
+import { saveTokenToLocalStorage, removeTokenFromLocalStorage } from '../apis/localtoken';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ export const LoginPage: React.FC = () => {
 
   const handleLogin = async (userData: { name: string; email: string; nationality: 'Japanese' | 'Vietnamese' }, token?: string) => {
     if (token) {
-      localStorage.setItem('token', token);
+      saveTokenToLocalStorage(token);
       
       try {
         const response = await getUserProfile();
@@ -27,7 +28,7 @@ export const LoginPage: React.FC = () => {
       } catch (error) {
         console.error('Failed to fetch user profile after login:', error);
         toast.error('Failed to load user profile');
-        localStorage.removeItem('token');
+        removeTokenFromLocalStorage();
       }
     }
   };
