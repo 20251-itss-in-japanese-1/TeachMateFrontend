@@ -66,3 +66,42 @@ export async function createSchedule(request: CreateScheduleRequest) {
     const res = Http.post<ScheduleResponse>('/schedule', request);
     return res.then(r => r.data);
 }
+
+// --- Poll API ---
+export interface CreatePollRequest {
+  threadId: string;
+  question: string;
+  options: string[];
+  allowMultiple?: boolean;
+}
+
+export interface PollResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+}
+
+export async function createPoll(request: CreatePollRequest) {
+  const res = Http.post<PollResponse>('/poll', request);
+  return res.then(r => r.data);
+}
+
+export async function getPollById(pollId: string) {
+  const res = Http.get<PollResponse>(`/poll/${pollId}`);
+  return res.then(r => r.data);
+}
+
+export async function votePoll(pollId: string, optionIndex: number) {
+  const res = Http.post<PollResponse>(`/poll/${pollId}/vote`, { optionIndex });
+  return res.then(r => r.data);
+}
+
+export async function removeVotePoll(pollId: string) {
+  const res = Http.delete<PollResponse>(`/poll/${pollId}/vote`);
+  return res.then(r => r.data);
+}
+
+export async function getThreadPolls(threadId: string) {
+  const res = Http.get<PollResponse>(`/poll/thread/${threadId}`);
+  return res.then(r => r.data);
+}

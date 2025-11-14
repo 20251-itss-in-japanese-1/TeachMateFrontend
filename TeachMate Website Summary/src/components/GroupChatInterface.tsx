@@ -48,8 +48,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
-import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
-import { createSchedule } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, createSchedule, createPoll } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -237,6 +236,7 @@ export function GroupChatInterface({
   onRefreshThread
 }: GroupChatInterfaceProps) {
   const t = translations[language];
+  const [creatingPoll, setCreatingPoll] = useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [infoDrawerVisible, setInfoDrawerVisible] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
@@ -574,43 +574,60 @@ export function GroupChatInterface({
     }
   };
 
-  const handleCreatePoll = () => {
-    if (!pollQuestion.trim()) {
+  const handleCreatePoll = async () => {
+    const question = pollQuestion.trim();
+    const validOptions = pollOptions.map(o => o.trim()).filter(o => o);
+
+    if (!question) {
       toast.error(language === 'ja' ? '質問を入力してください' : 'Vui lòng nhập câu hỏi');
       return;
     }
-
-    const validOptions = pollOptions.filter(opt => opt.trim());
+    if (question.length > 100) {
+      toast.error(language === 'ja' ? '質問は100文字以内で入力してください' : 'Câu hỏi tối đa 100 ký tự');
+      return;
+    }
     if (validOptions.length < 2) {
       toast.error(language === 'ja' ? '少なくとも2つの選択肢を入力してください' : 'Vui lòng nhập ít nhất 2 lựa chọn');
       return;
     }
 
-    const pollMessage: GroupMessage = {
-      id: Date.now().toString(),
-      senderId: currentUser.id,
-      receiverId: selectedGroup.id,
-      content: `📊 ${language === 'ja' ? 'アンケート' : 'Bình chọn'}: ${pollQuestion}\n${validOptions.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}`,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
-      timestamp: new Date(),
-      type: 'text'
+    const payload = {
+      threadId: threadDetail?.thread?._id || selectedGroup.id,
+      question,
+      options: validOptions,
+      allowMultiple: pollAllowMultiple
     };
 
-    setMessages([...messages, pollMessage]);
-    toast.success(language === 'ja' ? 'アンケートを作成しました' : 'Đã tạo bình chọn');
-
-    setCreatePollModalVisible(false);
-    setPollQuestion('');
-    setPollOptions(['', '']);
-    setPollAllowMultiple(false);
+    setCreatingPoll(true);
+    try {
+      const res = await createPoll(payload);
+      if (res?.success) {
+        toast.success(language === 'ja' ? 'アンケートを作成しました' : 'Đã tạo bình chọn');
+        setCreatePollModalVisible(false);
+        setPollQuestion('');
+        setPollOptions(['', '']);
+        setPollAllowMultiple(false);
+        // refresh thread/messages so poll message appears
+        if (onRefreshThread) {
+          try { await onRefreshThread(); } catch (e) { /* ignore */ }
+        }
+      } else {
+        toast.error(res?.message || (language === 'ja' ? '作成に失敗しました' : 'Tạo thất bại'));
+      }
+    } catch (err: any) {
+      console.error('createPoll failed', err);
+      toast.error(language === 'ja' ? `エラー: ${err?.message || err}` : `Lỗi: ${err?.message || err}`);
+    } finally {
+      setCreatingPoll(false);
+    }
   };
 
   const handleAddPollOption = () => {
-    if (pollOptions.length < 6) {
+    // enforce max 5 options as spec (2 default + up to 3 more)
+    if (pollOptions.length < 5) {
       setPollOptions([...pollOptions, '']);
     } else {
-      toast.info(language === 'ja' ? '最大6つの選択肢まで追加できます' : 'Tối đa 6 lựa chọn');
+      toast.info(language === 'ja' ? '最大5つの選択肢まで追加できます' : 'Tối đa 5 lựa chọn');
     }
   };
 
@@ -1130,6 +1147,10 @@ export function GroupChatInterface({
         onOk={handleCreatePoll}
         okText={language === 'ja' ? '作成' : 'Tạo'}
         cancelText={language === 'ja' ? 'キャンセル' : 'Hủy'}
+        okButtonProps={{
+          disabled: creatingPoll || !pollQuestion.trim() || (pollOptions.map(o => o.trim()).filter(o => o).length < 2) || pollQuestion.trim().length > 100,
+          loading: creatingPoll
+        }}
         width={600}
         centered
       >
@@ -1175,7 +1196,7 @@ export function GroupChatInterface({
                 type="dashed"
                 block
                 onClick={handleAddPollOption}
-                disabled={pollOptions.length >= 6}
+                disabled={pollOptions.length >= 5}
               >
                 + {language === 'ja' ? '選択肢を追加' : 'Thêm lựa chọn'}
               </AntButton>
