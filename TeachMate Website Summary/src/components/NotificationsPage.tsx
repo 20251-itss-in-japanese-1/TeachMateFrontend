@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Notification, Teacher } from '../types';
 import { translations, Language } from '../translations';
 import { 
@@ -23,8 +23,9 @@ import {
   DeleteOutlined,
   LeftOutlined
 } from '@ant-design/icons';
-import { getNoti, markNotiAsRead, markAllNotiAsRead } from '../apis/noti.api';
+import { markNotiAsRead, markAllNotiAsRead } from '../apis/noti.api';
 import { toast } from 'sonner';
+import { useNotifications } from '../hooks/useNoti';
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
@@ -40,55 +41,30 @@ export function NotificationsPage({
 }: NotificationsPageProps) {
   const t = translations[language];
   const [activeTab, setActiveTab] = useState('all');
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // Use the custom hook for notifications
+  const { data: notificationsResponse, isLoading, refetch } = useNotifications(true);
 
-  // Fetch notifications from API
-  useEffect(() => {
-    let active = true;
-
-    const fetchNotifications = async () => {
-      setIsLoading(true);
-      try {
-        const response = await getNoti();
-        if (response.success) {
-          const mappedNotifications: Notification[] = response.data.map(noti => ({
-            id: noti._id,
-            type: noti.type as Notification['type'],
-            title: noti.title,
-            message: noti.body,
-            isRead: noti.read,
-            createdAt: new Date(noti.createdAt),
-            fromUserId: noti.refId
-          }));
-          if (active) setNotifications(mappedNotifications);
-        }
-      } catch (error) {
-        console.error('Failed to fetch notifications:', error);
-        if (active) setNotifications([]);
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 5000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, []);
+  // Map API response to Notification type
+  const notifications: Notification[] = notificationsResponse?.success 
+    ? notificationsResponse.data.map((noti: any) => ({
+        id: noti._id,
+        type: noti.type as Notification['type'],
+        title: noti.title,
+        message: noti.body,
+        isRead: noti.read,
+        createdAt: new Date(noti.createdAt),
+        fromUserId: noti.refId
+      }))
+    : [];
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {
       const response = await markNotiAsRead(notificationId);
       
       if (response.success) {
-        setNotifications(prev =>
-          prev.map(notif =>
-            notif.id === notificationId ? { ...notif, isRead: true } : notif
-          )
-        );
+        // Refetch to get updated data
+        refetch();
         toast.success(
           language === 'ja' 
             ? '通知を既読にしました' 
@@ -110,9 +86,8 @@ export function NotificationsPage({
       const response = await markAllNotiAsRead();
       
       if (response.success) {
-        setNotifications(prev =>
-          prev.map(notif => ({ ...notif, isRead: true }))
-        );
+        // Refetch to get updated data
+        refetch();
         toast.success(
           language === 'ja' 
             ? 'すべての通知を既読にしました' 
@@ -130,12 +105,14 @@ export function NotificationsPage({
   };
 
   const handleDeleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+    // Note: You might want to add an API call here to delete from server
     toast.success(
       language === 'ja' 
         ? '通知を削除しました' 
         : 'Đã xóa thông báo'
     );
+    // Refetch to sync with server
+    refetch();
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
