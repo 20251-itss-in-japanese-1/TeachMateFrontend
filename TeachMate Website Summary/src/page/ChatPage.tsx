@@ -205,6 +205,7 @@ export const ChatPage: React.FC = () => {
           } : null}
           isLoadingMessages={isLoadingThreadDetail}
           onBack={handleBack}
+          onRefreshThread={refetchThreadDetail}
           language={language}
         />
       )}

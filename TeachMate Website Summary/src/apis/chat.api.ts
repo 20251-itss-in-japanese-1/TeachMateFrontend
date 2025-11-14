@@ -36,8 +36,30 @@ export async function sendMessageWithFile(request: SendMessageWithFileRequest) {
         headers: {
             'Content-Type': 'multipart/form-data',
         },
-    }
-);
+    });
     return res.then(response => response.data);
 }
-    
+
+// --- Added: Schedule API ---
+export interface CreateScheduleRequest {
+    title: string;
+    description?: string;
+    startAt: string; // ISO string
+    // backend expects threadId and userId (from server validation error)
+    threadId: string;
+    userId: string;
+}
+
+export interface ScheduleResponse {
+    success: boolean;
+    message: string;
+    data?: any;
+}
+
+/**
+ * Create a schedule / event and post it to group chat
+ */
+export async function createSchedule(request: CreateScheduleRequest) {
+    const res = Http.post<ScheduleResponse>('/schedule', request);
+    return res.then(r => r.data);
+}

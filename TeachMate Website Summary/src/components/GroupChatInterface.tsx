@@ -49,6 +49,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
+import { createSchedule } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 
 const { TextArea } = AntInput;
@@ -100,6 +101,7 @@ interface GroupChatInterfaceProps {
   isLoadingMessages?: boolean;
   onBack: () => void;
   language: Language;
+  onRefreshThread?: () => Promise<any>; // allow parent to refresh thread/messages
 }
 
 interface GroupMessage extends Message {
@@ -518,35 +520,49 @@ export function GroupChatInterface({
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleCreateAppointment = () => {
+  const handleCreateAppointment = async () => {
     if (!appointmentDate || !appointmentTitle.trim()) {
       toast.error(language === 'ja' ? '日時とタイトルを入力してください' : 'Vui lòng nhập ngày giờ và tiêu đề');
       return;
     }
 
-    const appointmentMessage: GroupMessage = {
-      id: Date.now().toString(),
-      senderId: currentUser.id,
-      receiverId: selectedGroup.id,
-      content: `📅 ${language === 'ja' ? '予定' : 'Lịch hẹn'}: ${appointmentTitle}\n${appointmentDescription}\n📆 ${appointmentDate.format('DD/MM/YYYY')} ${appointmentTime}`,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
-      timestamp: new Date(),
-      type: 'text'
-    };
+    // Build ISO startAt (combine date + time). DatePicker value supports .format()
+    const timePart = appointmentTime || '00:00';
+    const combined = `${appointmentDate.format('YYYY-MM-DD')}T${timePart}`;
+    const startAtIso = new Date(combined).toISOString();
+    
+    try {
+      const threadId = threadDetail?.thread?._id || selectedGroup.id;
+      const userId = (currentUser as any).id || (currentUser as any)._id;
+      const payload = {
+        title: appointmentTitle,
+        description: appointmentDescription || undefined,
+        startAt: startAtIso,
+        threadId,
+        userId
+      };
 
-    setMessages([...messages, appointmentMessage]);
-    toast.success(
-      language === 'ja'
-        ? `予定を設定しました: ${appointmentDate.format('YYYY/MM/DD')} ${appointmentTime}`
-        : `Đã đặt lịch hẹn: ${appointmentDate.format('DD/MM/YYYY')} ${appointmentTime}`
-    );
+      const res = await createSchedule(payload);
+      if (res?.success) {
+        toast.success(
+          language === 'ja'
+            ? `予定を設定しました: ${appointmentDate.format('YYYY/MM/DD')} ${appointmentTime}`
+            : `Đã đặt lịch hẹn: ${appointmentDate.format('DD/MM/YYYY')} ${appointmentTime}`
+        );
 
-    setAppointmentModalVisible(false);
-    setAppointmentDate(null);
-    setAppointmentTime('12:00');
-    setAppointmentTitle('');
-    setAppointmentDescription('');
+        setAppointmentModalVisible(false);
+        setAppointmentDate(null);
+        setAppointmentTime('12:00');
+        setAppointmentTitle('');
+        setAppointmentDescription('');
+      } else {
+        // handle non-success response
+        toast.error(language === 'ja' ? '予定の作成に失敗しました' : 'Tạo lịch hẹn thất bại');
+      }
+    } catch (err) {
+      console.error('Failed to create appointment:', err);
+      toast.error(language === 'ja' ? '予定の作成に失敗しました' : 'Tạo lịch hẹn thất bại');
+    }
   };
 
   const handleCreatePoll = () => {
