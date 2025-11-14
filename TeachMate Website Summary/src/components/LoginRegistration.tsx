@@ -53,14 +53,27 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
   const handleOAuthCallback = async (token: string) => {
     setIsLoading(true);
     try {
-      await onLogin({
-        name: 'User',
-        email: 'user@example.com',
-        nationality: 'Japanese'
-      }, token);
+      // Save token to localStorage
+      localStorage.setItem('token', token);
+      
+      // Fetch user profile from API
+      const { getUserProfile } = await import('../apis/user.api');
+      const response = await getUserProfile();
+      
+      if (response.success) {
+        const userData = response.data;
+        await onLogin({
+          name: userData.name || userData.email.split('@')[0],
+          email: userData.email,
+          nationality: userData.nationality || 'Japanese'
+        }, token);
+      } else {
+        throw new Error('Failed to fetch user profile');
+      }
     } catch (error) {
       console.error('OAuth callback error:', error);
       setError('Failed to complete social login');
+      localStorage.removeItem('token');
     } finally {
       setIsLoading(false);
     }
