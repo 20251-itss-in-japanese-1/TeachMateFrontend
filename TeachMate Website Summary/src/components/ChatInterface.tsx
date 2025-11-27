@@ -585,7 +585,10 @@ export function ChatInterface({
             </Tooltip>
             
             <div 
-              onClick={() => onViewProfile(selectedTeacher)}
+              onClick={() => {
+                setSelectedProfileTeacher(selectedTeacher);
+                setProfileModalOpen(true);
+              }}
               className="flex items-center gap-3 cursor-pointer hover:bg-white/80 rounded-2xl px-3 py-2 transition-all duration-300 hover:shadow-md"
             >
               <div className="relative">
