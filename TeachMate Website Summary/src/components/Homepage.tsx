@@ -32,6 +32,7 @@ import {
 import { friendSuggest } from '../apis/friend.api';
 import { searchTeacher } from '../apis/user.api';
 import { mapUserToTeacher } from '../utils/mappers';
+import { TeacherProfile } from './TeacherProfile';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -81,6 +82,10 @@ export function Homepage({
   const [selectedNationality, setSelectedNationality] = useState<string>('all');
   const [experienceRange, setExperienceRange] = useState<[number, number]>([0, 20]);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Teacher profile modal states
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedProfileTeacher, setSelectedProfileTeacher] = useState<Teacher | null>(null);
   
 
   const [teacherPage, setTeacherPage] = useState(1);
@@ -440,7 +445,10 @@ export function Homepage({
                         <Space.Compact block>
                           <AntButton 
                             icon={<EyeOutlined />}
-                            onClick={() => onViewTeacherProfile(teacher)}
+                            onClick={() => {
+                              setSelectedProfileTeacher(teacher);
+                              setProfileModalOpen(true);
+                            }}
                             style={{ width: '50%' }}
                           >
                             {t.viewProfile}
@@ -551,6 +559,23 @@ export function Homepage({
           )}
         </div>
       </div>
+      
+      {/* Teacher Profile Modal */}
+      <TeacherProfile
+        teacher={selectedProfileTeacher}
+        open={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+        }}
+        onStartChat={(teacher) => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+          // Navigate to chat or call parent handler
+          onViewTeacherProfile(teacher);
+        }}
+        language={language}
+      />
     </div>
   );
 }
