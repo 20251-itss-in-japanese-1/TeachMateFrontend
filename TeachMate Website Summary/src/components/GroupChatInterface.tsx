@@ -48,8 +48,10 @@ import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
+import { Check, Eye } from 'lucide-react';
 import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
+import { TeacherProfile } from './TeacherProfile';
 
 const { TextArea } = AntInput;
 const { Text, Title, Paragraph } = Typography;
@@ -319,6 +321,10 @@ export function GroupChatInterface({
   const [isSending, setIsSending] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
+  
+  // Teacher profile modal
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedProfileTeacher, setSelectedProfileTeacher] = useState<Teacher | null>(null);
 
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
@@ -878,6 +884,8 @@ export function GroupChatInterface({
               const showAvatar = index === 0 || 
                 threadDetail.messages[index - 1].senderId._id !== message.senderId._id;
               const messageDate = new Date(message.createdAt);
+              // Check if this is the last message sent by the current user
+              const isLastUserMessage = index === threadDetail.messages.length - 1 && isOwnMessage;
 
               return (
                 <div
@@ -888,7 +896,29 @@ export function GroupChatInterface({
                   {!isOwnMessage && (
                     <div className="w-8 h-8 flex-shrink-0">
                       {showAvatar ? (
-                        <Avatar className="w-8 h-8">
+                        <Avatar 
+                          className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                          onClick={() => {
+                            const member = groupMembers.find(m => m.id === message.senderId._id);
+                            if (member) {
+                              setSelectedProfileTeacher(member);
+                              setProfileModalOpen(true);
+                            } else {
+                              setSelectedProfileTeacher({
+                                id: message.senderId._id,
+                                name: message.senderId.name,
+                                avatar: message.senderId.avatarUrl || '',
+                                nationality: 'Japanese',
+                                specialties: [],
+                                experience: 0,
+                                interests: [],
+                                bio: '',
+                                subjects: []
+                              });
+                              setProfileModalOpen(true);
+                            }
+                          }}
+                        >
                           <AvatarImage 
                             src={message.senderId?.avatarUrl || ''} 
                             alt={message.senderId?.name || ''}
@@ -943,6 +973,13 @@ export function GroupChatInterface({
                           minute: '2-digit'
                         })}
                       </Text>
+                      {isLastUserMessage && (
+                        message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
+                          <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-gray-400" />
+                        )
+                      )}
                     </div>
                   </div>
 
@@ -1949,6 +1986,21 @@ export function GroupChatInterface({
           />
         </div>
       </Modal>
+
+      {/* Teacher Profile Modal */}
+      <TeacherProfile
+        teacher={selectedProfileTeacher}
+        open={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+        }}
+        onStartChat={(teacher) => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+        }}
+        language={language}
+      />
     </div>
   );
 }

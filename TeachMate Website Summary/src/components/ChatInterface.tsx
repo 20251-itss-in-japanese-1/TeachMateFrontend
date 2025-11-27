@@ -43,10 +43,11 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
-import { CheckCheck, MessageCircle } from 'lucide-react';
+import { Check, Eye, MessageCircle } from 'lucide-react';
 import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
+import { TeacherProfile } from './TeacherProfile';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
@@ -266,6 +267,10 @@ export function ChatInterface({
   const [appointmentTime, setAppointmentTime] = useState('12:00');
   const [appointmentTitle, setAppointmentTitle] = useState('');
   const [appointmentDescription, setAppointmentDescription] = useState('');
+  
+  // Teacher profile modal
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [selectedProfileTeacher, setSelectedProfileTeacher] = useState<Teacher | null>(null);
   
   // File selection
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -674,6 +679,8 @@ export function ChatInterface({
                   const isOwnMessage = message.senderId._id === currentTeacher.id;
                   // Removed showAvatar so every message shows an avatar
                   const messageDate = new Date(message.createdAt);
+                  // Check if this is the last message sent by the current user
+                  const isLastUserMessage = index === threadDetail.messages.length - 1 && isOwnMessage;
 
                   return (
                     <div
@@ -682,7 +689,23 @@ export function ChatInterface({
                     >
                       {/* Avatar for other user (left side) */}
                       {!isOwnMessage && (
-                        <div className="w-9 h-9 flex-shrink-0 mb-1">
+                        <div 
+                          className="w-9 h-9 flex-shrink-0 mb-1 cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => {
+                            setSelectedProfileTeacher({
+                              id: message.senderId._id,
+                              name: message.senderId.name,
+                              avatar: message.senderId.avatarUrl || '',
+                              nationality: 'Japanese',
+                              specialties: [],
+                              experience: 0,
+                              interests: [],
+                              bio: '',
+                              subjects: []
+                            });
+                            setProfileModalOpen(true);
+                          }}
+                        >
                           <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
                             <AvatarImage 
                               src={message.senderId.avatarUrl} 
@@ -734,100 +757,12 @@ export function ChatInterface({
                               minute: '2-digit'
                             })}
                           </Text>
-                          {isOwnMessage && message.isReadByMe && (
-                            <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Avatar for own message (right side) */}
-                      {isOwnMessage && (
-                        <div className="w-9 h-9 flex-shrink-0 mb-1">
-                          <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                            <AvatarImage 
-                              src={currentTeacher.avatar} 
-                              alt={currentTeacher.name}
-                              className="object-cover"
-                            />
-                            <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
-                              {currentTeacher.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-            ) : threadDetail && threadDetail.messages.length > 0 ? (
-              <div className="space-y-4">
-                {threadDetail.messages.map((message, index) => {
-                  const isOwnMessage = message.senderId._id === currentTeacher.id;
-                  // Removed showAvatar so every message shows an avatar
-                  const messageDate = new Date(message.createdAt);
-
-                  return (
-                    <div
-                      key={message._id}
-                      className={`flex items-end gap-2 message-bubble ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-                    >
-                      {/* Avatar for other user (left side) */}
-                      {!isOwnMessage && (
-                        <div className="w-9 h-9 flex-shrink-0 mb-1">
-                          <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                            <AvatarImage 
-                              src={message.senderId.avatarUrl} 
-                              alt={message.senderId.name}
-                              className="object-cover"
-                            />
-                            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm font-semibold">
-                              {message.senderId.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
-
-                      {/* Message Bubble */}
-                      <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                        <div
-                          className={`my-2 ${
-                            message.content && message.content.trim()
-                              ? `px-5 py-3 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
-                                  (message.content?.trim().length ?? 0) < 10 && (!message.attachments || message.attachments.length === 0)
-                                    ? 'w-[260px] min-h-[44px]'
-                                    : 'w-auto'
-                                } ${
-                                  isOwnMessage
-                                    ? 'bg-blue-50 border-blue-200 text-black'
-                                    : 'bg-gray-100 border-gray-200 text-black'
-                                }`
-                              : ''
-                          }`}
-                        >
-                          {message.content && message.content.trim() && (
-                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
-                              {message.content}
-                            </p>
-                          )}
-                          
-                          {/* Render attachments */}
-                          {message.attachments && message.attachments.length > 0 && (
-                            <div className={message.content?.trim() ? 'mt-2' : ''}>
-                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 mt-1.5 px-3">
-                          <Text className="text-xs text-gray-400 font-medium">
-                            {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </Text>
-                          {isOwnMessage && message.isReadByMe && (
-                            <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
+                          {isLastUserMessage && (
+                            message.readBy && message.readBy.some((reader: any) => reader._id !== currentTeacher.id) ? (
+                              <Eye className="w-3.5 h-3.5 text-blue-500" />
+                            ) : (
+                              <Check className="w-3.5 h-3.5 text-gray-400" />
+                            )
                           )}
                         </div>
                       </div>
@@ -870,7 +805,7 @@ export function ChatInterface({
                             minute: '2-digit'
                           })}
                         </Text>
-                        <CheckCheck className="w-3.5 h-3.5 text-blue-300" />
+                        <Check className="w-3.5 h-3.5 text-gray-300" />
                       </div>
                     </div>
                     {/* Avatar for own message (right side) */}
@@ -1417,6 +1352,21 @@ export function ChatInterface({
           />
         </div>
       </Modal>
+
+      {/* Teacher Profile Modal */}
+      <TeacherProfile
+        teacher={selectedProfileTeacher}
+        open={profileModalOpen}
+        onClose={() => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+        }}
+        onStartChat={(teacher) => {
+          setProfileModalOpen(false);
+          setSelectedProfileTeacher(null);
+        }}
+        language={language}
+      />
     </div>
   );
 }
