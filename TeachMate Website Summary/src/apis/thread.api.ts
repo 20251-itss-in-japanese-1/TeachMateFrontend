@@ -15,3 +15,31 @@ export async function createThreadGroup(name: string, memberIds: string[]) {
     const res = Http.post<ThreadDetailResponse>('/thread/group', {name, memberIds: memberIds});
     return res.then(response => response.data);
 }
+
+export interface ThreadAttachmentsResponse {
+    success: boolean;
+    message: string;
+    data: {
+        link: Array<{
+            kind: string;
+            mime: string;
+            url: string;
+        }>;
+        image: Array<{
+            kind: string;
+            mime: string;
+            url: string;
+        }>;
+        file: Array<{
+            kind: string;
+            mime: string;
+            url: string;
+        }>;
+    };
+}
+
+export async function getThreadAttachments(threadId: string) {
+    const res = Http.get<ThreadAttachmentsResponse>(`/thread/attachments/${threadId}`);
+    return res.then(response => response.data);
+}
+

@@ -52,6 +52,7 @@ import { Check, Eye } from 'lucide-react';
 import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { TeacherProfile } from './TeacherProfile';
+import { useThreadAttachments } from '../hooks/useThreadAttachments';
 
 const { TextArea } = AntInput;
 const { Text, Title, Paragraph } = Typography;
@@ -258,8 +259,58 @@ export function GroupChatInterface({
   const [groupMembers, setGroupMembers] = useState<Teacher[]>([]); // will populate from threadDetail
   const [groupEvents, setGroupEvents] = useState<GroupEvent[]>([]); // schedules from backend
   const [groupPolls, setGroupPolls] = useState<GroupPoll[]>([]); // polls from backend
+  
+  // Fetch thread attachments with 2s polling
+  const { data: attachmentsData } = useThreadAttachments(
+    threadDetail?.thread?.id,
+    !!threadDetail?.thread?.id
+  );
+  
+  // Convert API attachments to SharedMedia format
+  const sharedMedia: SharedMedia[] = React.useMemo(() => {
+    if (!attachmentsData?.success) return [];
+    
+    const media: SharedMedia[] = [];
+    
+    // Add images
+    attachmentsData.data.image.forEach((img, idx) => {
+      media.push({
+        id: `img-${idx}`,
+        type: 'image',
+        name: img.url.split('/').pop() || `image-${idx}.jpg`,
+        url: img.url,
+        uploadedBy: 'Unknown',
+        date: new Date()
+      });
+    });
+    
+    // Add files
+    attachmentsData.data.file.forEach((file, idx) => {
+      media.push({
+        id: `file-${idx}`,
+        type: 'file',
+        name: file.url.split('/').pop() || `file-${idx}`,
+        url: file.url,
+        uploadedBy: 'Unknown',
+        date: new Date()
+      });
+    });
+    
+    // Add links
+    attachmentsData.data.link.forEach((link, idx) => {
+      media.push({
+        id: `link-${idx}`,
+        type: 'link',
+        name: link.url.split('/').pop() || `link-${idx}`,
+        url: link.url,
+        uploadedBy: 'Unknown',
+        date: new Date()
+      });
+    });
+    
+    return media;
+  }, [attachmentsData]);
   // Shared media (images/files/links) referenced in the UI
-  const [sharedMedia, setSharedMedia] = useState<SharedMedia[]>([]);
   const [infoDrawerVisible, setInfoDrawerVisible] = useState(false);
   const [editingGroupName, setEditingGroupName] = useState(false);
   const [tempGroupName, setTempGroupName] = useState(selectedGroup.name);
@@ -1657,24 +1708,24 @@ export function GroupChatInterface({
                 header={`${language === 'ja' ? '画像・動画' : 'Ảnh/Video'} (${sharedMedia.filter(m => m.type === 'image' || m.type === 'video').length})`}
                 key="5-1"
               >
-                <List
-                  size="small"
-                  dataSource={sharedMedia.filter(m => m.type === 'image' || m.type === 'video')}
-                  renderItem={(item) => (
-                    <List.Item>
-                      <List.Item.Meta
-                        avatar={<PictureOutlined />}
-                        title={item.name}
-                        description={
-                          <>
-                            <div className="text-xs text-gray-500">{item.uploadedBy}</div>
-                            <div className="text-xs text-gray-400">{dayjs(item.date).format('DD/MM/YYYY')}</div>
-                          </>
-                        }
+                <div className="grid grid-cols-3 gap-2">
+                  {sharedMedia.filter(m => m.type === 'image' || m.type === 'video').map((item) => (
+                    <div 
+                      key={item.id}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => {
+                        setSelectedImage(item.url);
+                        setImageModalVisible(true);
+                      }}
+                    >
+                      <img 
+                        src={item.url} 
+                        alt={item.name}
+                        className="w-full h-20 object-cover rounded-lg border border-gray-200"
                       />
-                    </List.Item>
-                  )}
-                />
+                    </div>
+                  ))}
+                </div>
               </Panel>
 
               <Panel
@@ -1685,7 +1736,27 @@ export function GroupChatInterface({
                   size="small"
                   dataSource={sharedMedia.filter(m => m.type === 'file')}
                   renderItem={(item) => (
-                    <List.Item>
+                    <List.Item
+                      actions={[
+                        <Tooltip title={language === 'ja' ? 'ダウンロード' : 'Tải xuống'} key="download">
+                          <AntButton
+                            type="text"
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = item.url;
+                              link.download = item.name;
+                              link.target = '_blank';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="text-blue-600 hover:text-blue-700"
+                          />
+                        </Tooltip>
+                      ]}
+                    >
                       <List.Item.Meta
                         avatar={<FileOutlined />}
                         title={item.name}
@@ -1709,10 +1780,23 @@ export function GroupChatInterface({
                   size="small"
                   dataSource={sharedMedia.filter(m => m.type === 'link')}
                   renderItem={(item) => (
-                    <List.Item>
+                    <List.Item 
+                      className="hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                      onClick={() => window.open(item.url, '_blank')}
+                    >
                       <List.Item.Meta
                         avatar={<LinkOutlined />}
-                        title={item.name}
+                        title={
+                          <a 
+                            href={item.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {item.name}
+                          </a>
+                        }
                         description={
                           <>
                             <div className="text-xs text-gray-500">{item.uploadedBy}</div>

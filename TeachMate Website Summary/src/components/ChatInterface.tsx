@@ -48,6 +48,7 @@ import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
 import { TeacherProfile } from './TeacherProfile';
+import { useThreadAttachments } from '../hooks/useThreadAttachments';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
@@ -249,6 +250,12 @@ export function ChatInterface({
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
 
+  // Fetch thread attachments with 2s polling
+  const { data: attachmentsData } = useThreadAttachments(
+    threadDetail?.thread?.id,
+    !!threadDetail?.thread?.id
+  );
+
   // Auto-scroll to bottom when messages update or optimistic messages added
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -282,11 +289,47 @@ export function ChatInterface({
     { id: '2', date: new Date('2025-10-25T10:30:00'), time: '10:30', content: 'Chia sẻ tài liệu STEM' }
   ]);
   
-  const [sharedMedia] = useState<SharedMedia[]>([
-    { id: '1', type: 'image', name: 'teaching_method.jpg', url: '#', date: new Date('2025-10-10') },
-    { id: '2', type: 'file', name: 'lesson_plan.pdf', url: '#', date: new Date('2025-10-12') },
-    { id: '3', type: 'link', name: 'Educational Resources', url: 'https://example.com', date: new Date('2025-10-14') }
-  ]);
+  // Convert API attachments to SharedMedia format
+  const sharedMedia: SharedMedia[] = React.useMemo(() => {
+    if (!attachmentsData?.success) return [];
+    
+    const media: SharedMedia[] = [];
+    
+    // Add images
+    attachmentsData.data.image.forEach((img, idx) => {
+      media.push({
+        id: `img-${idx}`,
+        type: 'image',
+        name: img.url.split('/').pop() || `image-${idx}.jpg`,
+        url: img.url,
+        date: new Date()
+      });
+    });
+    
+    // Add files
+    attachmentsData.data.file.forEach((file, idx) => {
+      media.push({
+        id: `file-${idx}`,
+        type: 'file',
+        name: file.url.split('/').pop() || `file-${idx}`,
+        url: file.url,
+        date: new Date()
+      });
+    });
+    
+    // Add links
+    attachmentsData.data.link.forEach((link, idx) => {
+      media.push({
+        id: `link-${idx}`,
+        type: 'link',
+        name: link.url.split('/').pop() || `link-${idx}`,
+        url: link.url,
+        date: new Date()
+      });
+    });
+    
+    return media;
+  }, [attachmentsData]);
   
   const [commonGroups] = useState([
     { id: '1', name: 'Mathematics Education Exchange', memberCount: 124 },
@@ -1221,32 +1264,54 @@ export function ChatInterface({
             key="3"
           >
             <Collapse ghost size="small" className="media-collapse">
-              <Panel header={`${language === 'ja' ? '画像・動画' : 'Ảnh/Video'} (1)`} key="3-1">
-                <List
-                  size="small"
-                  dataSource={sharedMedia.filter(m => m.type === 'image' || m.type === 'video')}
-                  renderItem={(item: SharedMedia) => (
-                    <List.Item className="hover:bg-gray-50 rounded-lg transition-colors px-2">
-                      <List.Item.Meta
-                        avatar={
-                          <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                            <PictureOutlined className="text-blue-600" />
-                          </div>
-                        }
-                        title={<span className="text-sm font-medium">{item.name}</span>}
-                        description={<span className="text-xs">{dayjs(item.date).format('DD/MM/YYYY')}</span>}
+              <Panel header={`${language === 'ja' ? '画像・動画' : 'Ảnh/Video'} (${sharedMedia.filter(m => m.type === 'image' || m.type === 'video').length})`} key="3-1">
+                <div className="grid grid-cols-3 gap-2">
+                  {sharedMedia.filter(m => m.type === 'image' || m.type === 'video').map((item: SharedMedia) => (
+                    <div 
+                      key={item.id}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => {
+                        setSelectedImage(item.url);
+                        setImageModalVisible(true);
+                      }}
+                    >
+                      <img 
+                        src={item.url} 
+                        alt={item.name}
+                        className="w-full h-20 object-cover rounded-lg border border-gray-200"
                       />
-                    </List.Item>
-                  )}
-                />
+                    </div>
+                  ))}
+                </div>
               </Panel>
               
-              <Panel header={`${language === 'ja' ? 'ファイル' : 'File'} (1)`} key="3-2">
+              <Panel header={`${language === 'ja' ? 'ファイル' : 'File'} (${sharedMedia.filter(m => m.type === 'file').length})`} key="3-2">
                 <List
                   size="small"
                   dataSource={sharedMedia.filter(m => m.type === 'file')}
                   renderItem={(item: SharedMedia) => (
-                    <List.Item className="hover:bg-gray-50 rounded-lg transition-colors px-2">
+                    <List.Item 
+                      className="hover:bg-gray-50 rounded-lg transition-colors px-2"
+                      actions={[
+                        <Tooltip title={language === 'ja' ? 'ダウンロード' : 'Tải xuống'} key="download">
+                          <AntButton
+                            type="text"
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = item.url;
+                              link.download = item.name;
+                              link.target = '_blank';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="text-blue-600 hover:text-blue-700"
+                          />
+                        </Tooltip>
+                      ]}
+                    >
                       <List.Item.Meta
                         avatar={
                           <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -1261,19 +1326,32 @@ export function ChatInterface({
                 />
               </Panel>
               
-              <Panel header={`${language === 'ja' ? 'リンク' : 'Link'} (1)`} key="3-3">
+              <Panel header={`${language === 'ja' ? 'リンク' : 'Link'} (${sharedMedia.filter(m => m.type === 'link').length})`} key="3-3">
                 <List
                   size="small"
                   dataSource={sharedMedia.filter(m => m.type === 'link')}
                   renderItem={(item: SharedMedia) => (
-                    <List.Item className="hover:bg-gray-50 rounded-lg transition-colors px-2">
+                    <List.Item 
+                      className="hover:bg-gray-50 rounded-lg transition-colors px-2 cursor-pointer"
+                      onClick={() => window.open(item.url, '_blank')}
+                    >
                       <List.Item.Meta
                         avatar={
                           <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
                             <LinkOutlined className="text-indigo-600" />
                           </div>
                         }
-                        title={<span className="text-sm font-medium">{item.name}</span>}
+                        title={
+                          <a 
+                            href={item.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {item.name}
+                          </a>
+                        }
                         description={<span className="text-xs">{dayjs(item.date).format('DD/MM/YYYY')}</span>}
                       />
                     </List.Item>
