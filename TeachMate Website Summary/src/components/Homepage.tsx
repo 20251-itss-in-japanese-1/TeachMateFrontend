@@ -33,6 +33,9 @@ import { friendSuggest } from '../apis/friend.api';
 import { searchTeacher } from '../apis/user.api';
 import { mapUserToTeacher } from '../utils/mappers';
 import { TeacherProfile } from './TeacherProfile';
+import { getThreadChat } from '../apis/chat.api';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -75,6 +78,7 @@ export function Homepage({
   onViewAllGroups
 }: HomepageProps) {
   const t = translations[language];
+  const navigate = useNavigate();
 
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -568,11 +572,32 @@ export function Homepage({
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
         }}
-        onStartChat={(teacher) => {
+        onStartChat={async (teacher) => {
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
-          // Navigate to chat or call parent handler
-          onViewTeacherProfile(teacher);
+          
+          try {
+            // Call getThreadChat API to get or create thread
+            const response = await getThreadChat({ recipientId: teacher.id });
+            
+            if (response.success && response.data) {
+              const threadId = response.data._id;
+              navigate(`/chat/${threadId}`);
+            } else {
+              toast.error(
+                language === 'ja'
+                  ? 'スレッドの作成に失敗しました'
+                  : 'Không thể tạo cuộc trò chuyện'
+              );
+            }
+          } catch (error: any) {
+            console.error('Failed to get or create thread:', error);
+            toast.error(
+              language === 'ja'
+                ? `エラー: ${error.message}`
+                : `Lỗi: ${error.message}`
+            );
+          }
         }}
         language={language}
       />

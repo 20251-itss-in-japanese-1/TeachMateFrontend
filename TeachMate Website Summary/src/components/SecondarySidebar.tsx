@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, UserPlus, Users, Hash, Flag } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Search, UserPlus, Users, Hash, Flag, Loader2 } from 'lucide-react';
 import { Button as AntButton, Modal, Input as AntInput, Select, message } from 'antd';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -10,6 +10,9 @@ import { Badge as AntBadge } from 'antd';
 import { translations, Language } from '../translations';
 import { Teacher } from '../types';
 import { reportUser } from '../apis/user.api';
+import { sendFriendRequest } from '../apis/friend.api';
+import { useThreadsStrangers } from '../hooks/useThreadsStrangers';
+import { mapThreadData } from '../utils/mappers';
 
 const { TextArea } = AntInput;
 
@@ -63,6 +66,7 @@ interface SecondarySidebarProps {
   onCreateGroup: () => void;
   onAcceptFriendRequest: (requestId: string) => void;
   onRejectFriendRequest: (requestId: string) => void;
+  currentUserId: string;
 }
 
 export function SecondarySidebar({
@@ -79,12 +83,14 @@ export function SecondarySidebar({
   onAddFriend,
   onCreateGroup,
   onAcceptFriendRequest,
-  onRejectFriendRequest
+  onRejectFriendRequest,
+  currentUserId
 }: SecondarySidebarProps) {
   const t = translations[language];
   const [searchQuery, setSearchQuery] = useState('');
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
   const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
+  const [showStrangerThreads, setShowStrangerThreads] = useState(false);
   
   // Report modal states
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -161,6 +167,30 @@ export function SecondarySidebar({
       lastMessageContent.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  // Stranger threads (polled & cached)
+  const { data: strangerThreadsData, refetch: refetchStrangerThreads, isFetching: isFetchingStrangers, isLoading: isLoadingStrangers } = useThreadsStrangers(showStrangerThreads);
+  const strangerThreads = useMemo(() => {
+    if (strangerThreadsData?.success) {
+      return mapThreadData(strangerThreadsData.data, currentUserId) || [];
+    }
+    return [];
+  }, [strangerThreadsData, currentUserId]);
+
+  const hasStrangerData = strangerThreadsData?.success && strangerThreads.length > 0;
+  const initialStrangerLoading = showStrangerThreads && isLoadingStrangers && !hasStrangerData;
+  const showStrangerFetching = showStrangerThreads && isFetchingStrangers && hasStrangerData;
+
+  const filteredStrangerThreads = strangerThreads.filter(thread => {
+    const name = thread.name || '';
+    const lastMessageContent = thread.lastMessage?.content || '';
+    return searchQuery === '' ||
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lastMessageContent.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const threadListToRender = showStrangerThreads ? filteredStrangerThreads : filteredThreads;
+  const loadingThreads = showStrangerThreads ? initialStrangerLoading : isLoadingThreads;
+
   if (view === 'chat') {
     return (
       <div className="w-96 bg-gradient-to-b from-blue-50 to-white border-r-2 border-blue-100 flex flex-col h-full shadow-sm">
@@ -199,48 +229,83 @@ export function SecondarySidebar({
 
         {/* Message Filters */}
         <div className="px-4 py-3 border-b-2 border-blue-100 bg-white/60 flex-shrink-0">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <AntButton
-              type={messageFilter === 'all' ? 'primary' : 'default'}
+              type={messageFilter === 'all' && !showStrangerThreads ? 'primary' : 'default'}
               size="middle"
-              onClick={() => setMessageFilter('all')}
-              className={`flex-1 ${messageFilter === 'all' ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
+              onClick={() => {
+                setShowStrangerThreads(false);
+                setMessageFilter('all');
+              }}
+              className={`flex-1 min-w-[120px] ${messageFilter === 'all' && !showStrangerThreads ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
             >
               {t.allMessages}
             </AntButton>
             <AntButton
-              type={messageFilter === 'read' ? 'primary' : 'default'}
+              type={messageFilter === 'read' && !showStrangerThreads ? 'primary' : 'default'}
               size="middle"
-              onClick={() => setMessageFilter('read')}
-              className={`flex-1 ${messageFilter === 'read' ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
+              onClick={() => {
+                setShowStrangerThreads(false);
+                setMessageFilter('read');
+              }}
+              className={`flex-1 min-w-[120px] ${messageFilter === 'read' && !showStrangerThreads ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
             >
               {t.markedAsRead}
             </AntButton>
             <AntButton
-              type={messageFilter === 'unread' ? 'primary' : 'default'}
+              type={messageFilter === 'unread' && !showStrangerThreads ? 'primary' : 'default'}
               size="middle"
-              onClick={() => setMessageFilter('unread')}
-              className={`flex-1 ${messageFilter === 'unread' ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
+              onClick={() => {
+                setShowStrangerThreads(false);
+                setMessageFilter('unread');
+              }}
+              className={`flex-1 min-w-[120px] ${messageFilter === 'unread' && !showStrangerThreads ? '!bg-blue-600 hover:!bg-blue-700' : '!text-blue-600 !border-blue-200 hover:!bg-blue-50 hover:!border-blue-300'}`}
             >
               {t.unreadMessages}
             </AntButton>
+            <AntButton
+              type={showStrangerThreads ? 'primary' : 'default'}
+              size="middle"
+              onClick={() => {
+                setShowStrangerThreads(true);
+                refetchStrangerThreads();
+              }}
+              className={`flex-1 min-w-[150px] ${showStrangerThreads ? '!bg-indigo-600 hover:!bg-indigo-700' : '!text-indigo-600 !border-indigo-200 hover:!bg-indigo-50 hover:!border-indigo-300'}`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {t.strangerMessages}
+                {showStrangerFetching && <Loader2 className="w-4 h-4 animate-spin" />}
+              </span>
+            </AntButton>
           </div>
+          {showStrangerThreads && (
+            <div className="mt-2 flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowStrangerThreads(false)}
+                className="text-indigo-600 hover:text-indigo-700"
+              >
+                {t.backToAll}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Threads List */}
         <ScrollArea className="flex-1 overflow-auto">
           <div className="p-2">
-            {isLoadingThreads ? (
+            {loadingThreads ? (
               <div className="text-center py-8 text-gray-500">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
                 <p className="text-sm">{language === 'ja' ? '読み込み中...' : 'Đang tải...'}</p>
               </div>
-            ) : filteredThreads.length === 0 ? (
+            ) : threadListToRender.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p>{t.noConversations}</p>
               </div>
             ) : (
-              filteredThreads.map((thread) => (
+              threadListToRender.map((thread) => (
                 <div
                   key={thread.id}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border group ${
@@ -297,6 +362,30 @@ export function SecondarySidebar({
                   </button>
 
                   {thread.type !== 'group' && thread.otherUser && (
+                    <>
+                      {thread.type === 'direct_stranger' && thread.lastMessage?.senderId === currentUserId && (
+                        <AntButton
+                          type="text"
+                          size="small"
+                          icon={<UserPlus className="w-4 h-4" />}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await sendFriendRequest(thread.otherUser!.id);
+                              if (res?.success) {
+                                message.success(language === 'ja' ? 'フレンド申請を送信しました' : 'Đã gửi lời mời kết bạn');
+                              } else {
+                                message.error(res?.message || (language === 'ja' ? '送信に失敗しました' : 'Gửi thất bại'));
+                              }
+                            } catch (err: any) {
+                              console.error('sendFriendRequest failed', err);
+                              message.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+                            }
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity !text-blue-600 hover:!bg-blue-50"
+                          title={language === 'ja' ? '友達追加' : 'Kết bạn'}
+                        />
+                      )}
                     <AntButton
                       type="text"
                       size="small"
@@ -308,6 +397,7 @@ export function SecondarySidebar({
                       className="opacity-0 group-hover:opacity-100 transition-opacity !text-red-500 hover:!bg-red-50"
                       title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
                     />
+                    </>
                   )}
                 </div>
               ))

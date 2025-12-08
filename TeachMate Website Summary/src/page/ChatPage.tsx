@@ -186,6 +186,8 @@ export const ChatPage: React.FC = () => {
           onSendFriendRequest={handleSendFriendRequest}
           language={language}
           onThreadCreated={handleThreadCreated}
+          onRefreshThread={refetchThreadDetail}
+          onRefreshThreads={refetchThreads}
         />
       )}
 
@@ -206,6 +208,7 @@ export const ChatPage: React.FC = () => {
           isLoadingMessages={isLoadingThreadDetail}
           onBack={handleBack}
           onRefreshThread={refetchThreadDetail}
+          onRefreshThreads={refetchThreads}
           language={language}
         />
       )}

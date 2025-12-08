@@ -1,29 +1,61 @@
 import { MessagesResponse } from '../types/message.type';
 import Http from './http';
 export interface SendMessageRequest {
-    threadId?: string;
+    threadId: string;
     content: string;
-    recipientId?: string;
 }
 export interface SendMessageWithFileRequest {
-    threadId?: string;
-    content: string;
-    recipientId?: string;
+    threadId: string;
+    content?: string;
     files: File[]; 
 }
+export interface GetThreadChatRequest {
+    senderId?: string;
+    recipientId: string;
+}
+export interface ThreadResponse {
+    success: boolean;
+    message: string;
+    data?: any;
+}
+export async function deleteMessage(messageId: string) {
+    const res = Http.delete<MessagesResponse>(`/chat/message/${messageId}`);
+    return res.then(response => response.data);
+}
+export async function getThreadChat(request: GetThreadChatRequest) {
+    const res = Http.post<ThreadResponse>('/chat/thread', {
+        recipientId: request.recipientId
+    });
+    return res.then(response => response.data);
+}
 export async function sendMessage(request: SendMessageRequest) {
-    const res = Http.post<MessagesResponse>('/chat/message', request);
+    if (!request.threadId || request.threadId === 'null') {
+        throw new Error('Thread ID is required');
+    }
+    if (!request.content || request.content.trim().length === 0) {
+        throw new Error('Message content cannot be empty');
+    }
+    if (request.content.length > 2000) {
+        throw new Error('Message content exceeds maximum length of 2000 characters');
+    }
+    
+    const res = Http.post<MessagesResponse>('/chat/message', {
+        threadId: request.threadId,
+        content: request.content.trim()
+    });
     return res.then(response => response.data);
 }
 export async function sendMessageWithFile(request: SendMessageWithFileRequest) {
+    if (!request.threadId || request.threadId === 'null') {
+        throw new Error('Thread ID is required');
+    }
+    if (!request.files || request.files.length === 0) {
+        throw new Error('At least one file is required');
+    }
+    
     const formData = new FormData();
     
-    if (request.threadId) {
-        formData.append('threadId', request.threadId);
-    }
-    if (request.recipientId) {
-        formData.append('recipientId', request.recipientId);
-    }
+    formData.append('threadId', request.threadId);
     // Set content to empty string if not provided
     formData.append('content', request.content || '');
     
@@ -40,7 +72,6 @@ export async function sendMessageWithFile(request: SendMessageWithFileRequest) {
     return res.then(response => response.data);
 }
 
-// --- Added / updated: Schedule API ---
 export interface CreateScheduleRequest {
     title: string;
     description?: string;

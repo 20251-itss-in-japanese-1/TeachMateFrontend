@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { acceptFriendRequest, rejectFriendRequest, sendFriendRequest } from '../apis/friend.api';
 import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
 import { removeTokenFromLocalStorage } from '../apis/localtoken';
+import { getThreadChat } from '../apis/chat.api';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
 
@@ -102,8 +103,37 @@ export const MainLayout: React.FC = () => {
     toast.success(language === 'ja' ? 'プロフィールを更新しました' : 'Đã cập nhật hồ sơ');
   };
 
-  const handleSelectChat = (teacher: Teacher) => {
-    navigate('/chat', { state: { teacher } });
+  const handleSelectChat = async (teacher: Teacher) => {
+    try {
+      // Call getThreadChat API to get or create thread
+      const response = await getThreadChat({ recipientId: teacher.id });
+      
+      if (response.success && response.data) {
+        const threadId = response.data._id;
+        setSelectedThreadId(threadId);
+        navigate(`/chat/${threadId}`);
+        
+        // Refetch all related APIs
+        await Promise.all([
+          refetchThreads(),
+          refetchFriendList(),
+          refetchFriendRequests()
+        ]);
+      } else {
+        toast.error(
+          language === 'ja'
+            ? 'スレッドの作成に失敗しました'
+            : 'Không thể tạo cuộc trò chuyện'
+        );
+      }
+    } catch (error: any) {
+      console.error('Failed to get or create thread:', error);
+      toast.error(
+        language === 'ja'
+          ? `エラー: ${error.message}`
+          : `Lỗi: ${error.message}`
+      );
+    }
   };
 
   const handleSelectGroup = (group: any) => {
@@ -251,6 +281,7 @@ export const MainLayout: React.FC = () => {
           onCreateGroup={() => setIsCreateGroupModalOpen(true)}
           onAcceptFriendRequest={handleAcceptFriendRequest}
           onRejectFriendRequest={handleRejectFriendRequest}
+          currentUserId={currentUser.id}
         />
       )}
 

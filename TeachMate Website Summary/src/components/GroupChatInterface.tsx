@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Teacher, Message } from '../types';
 import {
   Input as AntInput,
@@ -38,6 +39,7 @@ import {
   EditOutlined,
   BellOutlined,
   WarningOutlined,
+  DeleteOutlined,
   LogoutOutlined,
   QrcodeOutlined,
   DownloadOutlined,
@@ -49,7 +51,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import { Check, Eye } from 'lucide-react';
-import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule, getThreadChat, deleteMessage } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { TeacherProfile } from './TeacherProfile';
 import { useThreadAttachments } from '../hooks/useThreadAttachments';
@@ -105,6 +107,7 @@ interface GroupChatInterfaceProps {
   onBack: () => void;
   language: Language;
   onRefreshThread?: () => Promise<any>;
+  onRefreshThreads?: () => Promise<any>;
 }
 
 interface GroupMessage extends Message {
@@ -178,6 +181,7 @@ const renderAttachment = (attachment: { kind?: string; mime?: string; url?: stri
       </div>
     );
   }
+
   let icon = <FileOutlined className="text-blue-600" />;
   let color = 'blue';
   let typeName = 'File';
@@ -241,6 +245,74 @@ const renderAttachment = (attachment: { kind?: string; mime?: string; url?: stri
   );
 };
 
+// Helper to render message text with clickable links and inline images
+const renderMessageWithLinks = (
+  text: string,
+  onImageClick: (url: string) => void
+) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const imageRegex = /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/i;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
+  // If the message is only an image URL, display the image prominently
+  if (
+    imageRegex.test(text.trim()) &&
+    text.trim().match(urlRegex)?.length === 1 &&
+    text.trim() === text.trim().match(urlRegex)?.[0]
+  ) {
+    return (
+      <div className="my-2 flex justify-center">
+        <div
+          onClick={() => onImageClick(text)}
+          className="cursor-pointer hover:opacity-90 transition-opacity"
+        >
+          <img
+            src={text}
+            alt="chat-img"
+            className={isMobile ? 'max-w-[90vw] max-h-[40vh] rounded-lg border shadow' : 'max-w-xs max-h-60 rounded-lg border shadow'}
+            style={{ display: 'inline-block' }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (imageRegex.test(part)) {
+      return (
+        <div key={i} className="my-2">
+          <div
+            onClick={() => onImageClick(part)}
+            className="cursor-pointer hover:opacity-90 transition-opacity"
+          >
+            <img
+              src={part}
+              alt="chat-img"
+              className={isMobile ? 'max-w-[90vw] max-h-[40vh] rounded-lg border shadow' : 'max-w-xs max-h-60 rounded-lg border shadow'}
+              style={{ display: 'inline-block' }}
+            />
+          </div>
+        </div>
+      );
+    }
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 underline break-all hover:text-blue-300"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
 export function GroupChatInterface({
   currentUser,
   selectedGroup,
@@ -248,9 +320,11 @@ export function GroupChatInterface({
   isLoadingMessages = false,
   onBack,
   language,
-  onRefreshThread
+  onRefreshThread,
+  onRefreshThreads
 }: GroupChatInterfaceProps) {
   const t = translations[language];
+  const navigate = useNavigate();
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [voting, setVoting] = useState(false);
   const [votingPollId, setVotingPollId] = useState<string | null>(null);
@@ -324,6 +398,7 @@ export function GroupChatInterface({
   // Upload & Appointment Modals
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [appointmentDate, setAppointmentDate] = useState<any>(null);
   const [appointmentTime, setAppointmentTime] = useState('12:00');
@@ -684,6 +759,36 @@ export function GroupChatInterface({
     toast.success(language === 'ja' ? '説明を更新しました' : 'Đã cập nhật mô tả');
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    setDeletingMessageId(messageId);
+    try {
+      const res = await deleteMessage(messageId);
+      if (res?.success) {
+        toast.success(language === 'ja' ? 'メッセージを削除しました' : 'Đã xóa tin nhắn');
+      } else {
+        toast.error(res?.message || (language === 'ja' ? '削除に失敗しました' : 'Xóa thất bại'));
+      }
+    } catch (error: any) {
+      console.error('Failed to delete message', error);
+      toast.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+    } finally {
+      await onRefreshThread?.();
+      await onRefreshThreads?.();
+      setDeletingMessageId(null);
+    }
+  };
+
+  const confirmDeleteMessage = (messageId: string) => {
+    Modal.confirm({
+      title: language === 'ja' ? 'メッセージを削除しますか？' : 'Xóa tin nhắn?',
+      content: language === 'ja' ? 'このメッセージを削除します。' : 'Bạn có chắc muốn xóa tin nhắn này?',
+      okText: language === 'ja' ? '削除' : 'Xóa',
+      cancelText: language === 'ja' ? 'キャンセル' : 'Hủy',
+      okButtonProps: { danger: true, loading: deletingMessageId === messageId },
+      onOk: () => handleDeleteMessage(messageId)
+    });
+  };
+
   const handleCopyGroupLink = () => {
     const groupLink = `https://teachmate.app/group/${selectedGroup.id}`;
     navigator.clipboard.writeText(groupLink);
@@ -941,7 +1046,7 @@ export function GroupChatInterface({
               return (
                 <div
                   key={message._id}
-                  className={`flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                  className={`flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'} group`}
                 >
                   {/* Avatar for other users (left side) */}
                   {!isOwnMessage && (
@@ -986,7 +1091,7 @@ export function GroupChatInterface({
                   )}
 
                   {/* Message Bubble */}
-                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[65%]`}>
+                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
                     {/* Sender name for group - only show for others */}
                     {!isOwnMessage && showAvatar && (
                       <Text className="text-xs text-gray-500 mb-1 px-3">
@@ -994,36 +1099,48 @@ export function GroupChatInterface({
                       </Text>
                     )}
 
-                    <div
-                      className={`${
-                        message.content && message.content.trim()
-                          ? `px-4 py-2.5 shadow-sm ${
-                              isOwnMessage
-                                ? 'bg-blue-600 text-white rounded-[20px] rounded-tr-md'
-                                : 'bg-gray-200 text-gray-900 rounded-[20px] rounded-tl-md'
-                            }`
-                          : ''
-                      }`}
-                    >
-                      {message.content && message.content.trim() && (
-                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                          {message.content}
-                        </p>
-                      )}
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className={`space-y-1 ${message.content?.trim() ? 'mt-2' : ''}`}>
-                          {message.attachments.map((attachment: any, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1 mt-1 px-2">
+                    {(message.content?.trim() || (message.attachments && message.attachments.length > 0)) && (
+                      <div
+                        className={`relative w-fit max-w-[70vw] px-4 py-3 shadow-sm rounded-xl border ${
+                          isOwnMessage
+                            ? 'bg-blue-500 text-white border-blue-300'
+                            : 'bg-gray-100 text-gray-900 border-gray-200'
+                        }`}
+                      >
+                        {message.content && message.content.trim() && (
+                          <div className="text-[15px] leading-relaxed break-words text-left">
+                            {renderMessageWithLinks(message.content, (url) => {
+                              setSelectedImage(url);
+                              setImageModalVisible(true);
+                            })}
+                          </div>
+                        )}
+                        {message.attachments && message.attachments.length > 0 && (
+                          <div className={message.content?.trim() ? 'mt-2' : ''}>
+                            {message.attachments.map((attachment: any, idx: number) =>
+                              renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage)
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 mt-1 px-2">
                       <Text className="text-xs text-gray-400">
                         {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
                       </Text>
+                      <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
+                        <AntButton
+                          type="text"
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          loading={deletingMessageId === message._id}
+                          onClick={() => confirmDeleteMessage(message._id)}
+                          className="!p-0 text-red-500 hover:text-red-600"
+                        />
+                      </Tooltip>
                       {isLastUserMessage && (
                         message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
                           <Eye className="w-3.5 h-3.5 text-blue-400" />
@@ -1811,7 +1928,7 @@ export function GroupChatInterface({
             </Collapse>
           </Panel>
 
-          {/* Group Settings */}
+        {/* Group Settings */}
           <Panel
             header={
               <Space>
@@ -2079,9 +2196,32 @@ export function GroupChatInterface({
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
         }}
-        onStartChat={(teacher) => {
+        onStartChat={async (teacher) => {
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
+          
+          try {
+            // Call getThreadChat API to get or create thread
+            const response = await getThreadChat({ recipientId: teacher.id });
+            
+            if (response.success && response.data) {
+              const threadId = response.data._id;
+              navigate(`/chat/${threadId}`);
+            } else {
+              toast.error(
+                language === 'ja'
+                  ? 'スレッドの作成に失敗しました'
+                  : 'Không thể tạo cuộc trò chuyện'
+              );
+            }
+          } catch (error: any) {
+            console.error('Failed to get or create thread:', error);
+            toast.error(
+              language === 'ja'
+                ? `エラー: ${error.message}`
+                : `Lỗi: ${error.message}`
+            );
+          }
         }}
         language={language}
       />

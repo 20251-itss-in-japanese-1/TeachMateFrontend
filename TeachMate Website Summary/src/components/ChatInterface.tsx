@@ -38,13 +38,15 @@ import {
   DownloadOutlined,
   EyeOutlined
 } from '@ant-design/icons';
+import { formatDistanceToNow } from 'date-fns';
+import { Copy, RotateCcw, ZoomIn, ZoomOut, Download, XCircle } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { translations, Language } from '../translations';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import { Check, Eye, MessageCircle } from 'lucide-react';
-import { sendMessage, sendMessageWithFile } from '../apis/chat.api';
+import { sendMessage, sendMessageWithFile, getThreadChat, deleteMessage } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
 import { TeacherProfile } from './TeacherProfile';
@@ -53,6 +55,70 @@ import { useThreadAttachments } from '../hooks/useThreadAttachments';
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
 const { Text, Title } = Typography;
+
+// Helper function to render message text with links and inline images
+const renderMessageWithLinks = (
+  text: string, 
+  onImageClick: (url: string) => void
+) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const imageRegex = /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp))/i;
+  const isMobile = window.innerWidth < 640;
+
+  // If message is only an image URL, display it large
+  if (imageRegex.test(text.trim()) && text.trim().match(urlRegex)?.length === 1 && text.trim() === text.trim().match(urlRegex)?.[0]) {
+    return (
+      <div className="my-2 flex justify-center">
+        <div
+          onClick={() => onImageClick(text)}
+          className="cursor-pointer hover:opacity-90 transition-opacity"
+        >
+          <img
+            src={text}
+            alt="chat-img"
+            className={isMobile ? "max-w-[90vw] max-h-[40vh] rounded-lg border shadow" : "max-w-xs max-h-60 rounded-lg border shadow"}
+            style={{ display: "inline-block" }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (imageRegex.test(part)) {
+      return (
+        <div key={i} className="my-2">
+          <div
+            onClick={() => onImageClick(part)}
+            className="cursor-pointer hover:opacity-90 transition-opacity"
+          >
+            <img
+              src={part}
+              alt="chat-img"
+              className={isMobile ? "max-w-[90vw] max-h-[40vh] rounded-lg border shadow" : "max-w-xs max-h-60 rounded-lg border shadow"}
+              style={{ display: "inline-block" }}
+            />
+          </div>
+        </div>
+      );
+    }
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 underline break-all hover:text-blue-300"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
 
 // Helper function to render attachments
 const renderAttachment = (attachment: { kind: string; mime: string; url: string }, index: number, setImageModalVisible: (visible: boolean) => void, setSelectedImage: (url: string) => void) => {
@@ -179,6 +245,8 @@ interface ChatInterfaceProps {
   onSendFriendRequest: (teacher: Teacher) => void;
   language: Language;
   onThreadCreated?: (threadId: string) => void;
+  onRefreshThread?: () => Promise<any>;
+  onRefreshThreads?: () => Promise<any>;
 }
 
 interface MessageReaction {
@@ -218,7 +286,9 @@ export function ChatInterface({
   isFriend,
   onSendFriendRequest,
   language,
-  onThreadCreated
+  onThreadCreated,
+  onRefreshThread,
+  onRefreshThreads
 }: ChatInterfaceProps) {
   const t = translations[language];
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -249,6 +319,8 @@ export function ChatInterface({
   const [optimisticMessages, setOptimisticMessages] = useState<{ id: string; content: string; createdAt: Date }[]>([]);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [loadingResend, setLoadingResend] = useState<string | null>(null);
 
   // Fetch thread attachments with 2s polling
   const { data: attachmentsData } = useThreadAttachments(
@@ -282,6 +354,7 @@ export function ChatInterface({
   // File selection
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   
   // Mock data
   const [reminders] = useState<Reminder[]>([
@@ -339,6 +412,16 @@ export function ChatInterface({
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
     
+    // Require thread ID before sending
+    if (!threadDetail?.thread?._id) {
+      toast.error(
+        language === 'ja'
+          ? 'スレッドIDが必要です'
+          : 'Cần có ID cuộc trò chuyện'
+      );
+      return;
+    }
+    
     setIsSending(true);
     try {
       let response;
@@ -347,8 +430,7 @@ export function ChatInterface({
       if (selectedFiles.length > 0) {
         const fileData = {
           content: newMessage.trim() || '',
-          threadId: threadDetail?.thread?._id,
-          recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined,
+          threadId: threadDetail.thread._id,
           files: selectedFiles
         };
         response = await sendMessageWithFile(fileData);
@@ -356,14 +438,12 @@ export function ChatInterface({
         // Otherwise use regular sendMessage API
         const messageData = {
           content: newMessage,
-          threadId: threadDetail?.thread?._id,
-          recipientId: !threadDetail?.thread?._id ? selectedTeacher.id : undefined
+          threadId: threadDetail.thread._id
         };
         response = await sendMessage(messageData);
       }
       
       if (response.success) {
-        const sentContent = newMessage;
         setNewMessage('');
         setSelectedFiles([]);
         if (fileInputRef.current) {
@@ -374,43 +454,6 @@ export function ChatInterface({
             ? 'メッセージを送信しました' 
             : 'Đã gửi tin nhắn'
         );
-
-        // If sending to a new user (no thread yet), optimistically show message and poll for new thread
-        if (!threadDetail?.thread?._id && onThreadCreated) {
-          // show optimistic bubble
-          setOptimisticMessages((prev) => [
-            ...prev,
-            { id: `${Date.now()}`, content: sentContent, createdAt: new Date() }
-          ]);
-
-          // poll for threads to find the newly created one
-          const maxAttempts = 10;
-          let attempt = 0;
-          const interval = setInterval(async () => {
-            attempt++;
-            try {
-              const threadsRes = await getThreads();
-              if (threadsRes.success) {
-                const found = threadsRes.data.find((thr) => {
-                  if (thr.type === 'group') return false;
-                  const memberIds = (thr.members || []).map((m: any) => m.userId?._id);
-                  return memberIds.includes(currentTeacher.id) && memberIds.includes(selectedTeacher.id);
-                });
-                if (found) {
-                  clearInterval(interval);
-                  onThreadCreated(found._id);
-                  // clear optimistic once real thread loads
-                  setTimeout(() => setOptimisticMessages([]), 500);
-                }
-              }
-            } catch (e) {
-              // ignore and keep polling
-            }
-            if (attempt >= maxAttempts) {
-              clearInterval(interval);
-            }
-          }, 1000);
-        }
       }
     } catch (error: any) {
       console.error('Failed to send message:', error);
@@ -459,6 +502,36 @@ export function ChatInterface({
     setNickname(tempNickname);
     setEditingNickname(false);
     toast.success(language === 'ja' ? 'ニックネームを更新しました' : 'Đã cập nhật biệt danh');
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    setDeletingMessageId(messageId);
+    try {
+      const res = await deleteMessage(messageId);
+      if (res?.success) {
+        toast.success(language === 'ja' ? 'メッセージを削除しました' : 'Đã xóa tin nhắn');
+      } else {
+        toast.error(res?.message || (language === 'ja' ? '削除に失敗しました' : 'Xóa thất bại'));
+      }
+    } catch (error: any) {
+      console.error('Failed to delete message', error);
+      toast.error(language === 'ja' ? 'エラーが発生しました' : 'Đã xảy ra lỗi');
+    } finally {
+      await onRefreshThread?.();
+      await onRefreshThreads?.();
+      setDeletingMessageId(null);
+    }
+  };
+
+  const confirmDeleteMessage = (messageId: string) => {
+    Modal.confirm({
+      title: language === 'ja' ? 'メッセージを削除しますか？' : 'Xóa tin nhắn?',
+      content: language === 'ja' ? 'このメッセージを削除します。' : 'Bạn có chắc muốn xóa tin nhắn này?',
+      okText: language === 'ja' ? '削除' : 'Xóa',
+      cancelText: language === 'ja' ? 'キャンセル' : 'Hủy',
+      okButtonProps: { danger: true, loading: deletingMessageId === messageId },
+      onOk: () => handleDeleteMessage(messageId)
+    });
   };
 
   const handleReportConversation = () => {
@@ -569,7 +642,7 @@ export function ChatInterface({
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#f0f2f5]">
+    <div className="h-full flex flex-col bg-gray-100">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -723,111 +796,90 @@ export function ChatInterface({
               <div className="space-y-4">
                 {threadDetail.messages.map((message, index) => {
                   const isOwnMessage = message.senderId._id === currentTeacher.id;
-                  // Removed showAvatar so every message shows an avatar
                   const messageDate = new Date(message.createdAt);
-                  // Check if this is the last message sent by the current user
                   const isLastUserMessage = index === threadDetail.messages.length - 1 && isOwnMessage;
+                  const senderAvatar = isOwnMessage ? currentTeacher.avatar : message.senderId.avatarUrl;
+                  const senderName = isOwnMessage ? currentTeacher.name : message.senderId.name;
 
                   return (
                     <div
                       key={message._id}
-                      className={`flex items-end gap-2 message-bubble ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                      className={`w-full flex mb-4 animate-fade-in ${
+                        isOwnMessage ? 'justify-end' : 'justify-start'
+                      } group`}
                     >
-                      {/* Avatar for other user (left side) */}
-                      {!isOwnMessage && (
-                        <div 
-                          className="w-9 h-9 flex-shrink-0 mb-1 cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => {
-                            setSelectedProfileTeacher({
-                              id: message.senderId._id,
-                              name: message.senderId.name,
-                              avatar: message.senderId.avatarUrl || '',
-                              nationality: 'Japanese',
-                              specialties: [],
-                              experience: 0,
-                              interests: [],
-                              bio: '',
-                              subjects: []
-                            });
-                            setProfileModalOpen(true);
-                          }}
-                        >
-                          <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                            <AvatarImage 
-                              src={message.senderId.avatarUrl} 
-                              alt={message.senderId.name}
-                              className="object-cover"
-                            />
-                            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm font-semibold">
-                              {message.senderId.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
+                      <div className={`flex items-end gap-2 ${isOwnMessage ? 'flex-row' : 'flex-row'} max-w-[80%]`}>
+                        {/* Avatar only for the other participant */}
+                        {!isOwnMessage && (
+                          <div className="w-9 h-9 flex-shrink-0">
+                            <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
+                              <AvatarImage 
+                                src={senderAvatar || ''} 
+                                alt={senderName}
+                                className="object-cover"
+                              />
+                              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
+                                {senderName?.charAt(0).toUpperCase() || '?'}
+                              </AvatarFallback>
+                            </Avatar>
+                          </div>
+                        )}
 
-                      {/* Message Bubble */}
-                      <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                        <div
-                          className={`my-2 ${
-                            message.content && message.content.trim()
-                              ? `px-5 py-3 shadow-sm hover:shadow transition-all duration-200 rounded-xl border ${
-                                  (message.content?.trim().length ?? 0) < 10 && (!message.attachments || message.attachments.length === 0)
-                                    ? 'w-[260px] min-h-[44px]'
-                                    : 'w-auto'
-                                } ${
-                                  isOwnMessage
-                                    ? 'bg-blue-50 border-blue-200 text-black'
-                                    : 'bg-gray-100 border-gray-200 text-black'
-                                }`
-                              : ''
-                          }`}
-                        >
-                          {message.content && message.content.trim() && (
-                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
-                              {message.content}
-                            </p>
-                          )}
-                          
-                          {/* Render attachments */}
-                          {message.attachments && message.attachments.length > 0 && (
-                            <div className={message.content?.trim() ? 'mt-2' : ''}>
-                              {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
+                        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                          {/* Message header with timestamp */}
+                          <div className="flex items-center mb-1 text-xs text-gray-400 gap-2">
+                            <span className="font-medium">
+                              {isOwnMessage ? (language === 'ja' ? 'あなた' : 'Bạn') : senderName}
+                            </span>
+                            <span>•</span>
+                            <time>
+                              {formatDistanceToNow(messageDate, { addSuffix: true })}
+                            </time>
+                          </div>
+
+                          {/* Message content */}
+                          <div
+                            className="relative w-fit max-w-[70vw] px-4 py-3 shadow-sm bg-blue-500 text-white rounded-xl border border-blue-300"
+                          >
+                            <div className="text-[15px] leading-relaxed break-words text-left">
+                              {message.content && renderMessageWithLinks(message.content, (url) => {
+                                setSelectedImage(url);
+                                setImageModalVisible(true);
+                                setZoomLevel(1);
+                              })}
                             </div>
-                          )}
-                        </div>
+                            
+                            {/* Render attachments */}
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className={message.content?.trim() ? 'mt-2' : ''}>
+                                {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
+                              </div>
+                            )}
+                          </div>
 
-                        <div className="flex items-center gap-1.5 mt-1.5 px-3">
-                          <Text className="text-xs text-gray-400 font-medium">
-                            {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </Text>
-                          {isLastUserMessage && (
-                            message.readBy && message.readBy.some((reader: any) => reader._id !== currentTeacher.id) ? (
-                              <Eye className="w-3.5 h-3.5 text-blue-500" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5 text-gray-400" />
-                            )
-                          )}
+                          <div className="flex items-center gap-2 mt-0.5 px-1">
+                            <Text className="text-xs text-gray-400 font-medium">
+                              {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </Text>
+                            <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
+                              <AntButton
+                                type="text"
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                loading={deletingMessageId === message._id}
+                                onClick={() => confirmDeleteMessage(message._id)}
+                                className="!p-0 text-red-500 hover:text-red-600"
+                              />
+                            </Tooltip>
+                            {isLastUserMessage && (
+                              <Check className="w-3.5 h-3.5 text-gray-300" />
+                            )}
+                          </div>
                         </div>
                       </div>
-
-                      {/* Avatar for own message (right side) */}
-                      {isOwnMessage && (
-                        <div className="w-9 h-9 flex-shrink-0 mb-1">
-                          <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                            <AvatarImage 
-                              src={currentTeacher.avatar} 
-                              alt={currentTeacher.name}
-                              className="object-cover"
-                            />
-                            <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
-                              {currentTeacher.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -837,14 +889,14 @@ export function ChatInterface({
               <div className="space-y-4">
                 {optimisticMessages.map((msg) => (
                   <div key={msg.id} className="flex items-end gap-2 message-bubble justify-end">
-                    {/* Message Bubble (own) */}
+                    {/* Message Bubble (own, no avatar) */}
                     <div className="flex flex-col items-end max-w-[70%]">
-                      <div className="px-5 py-3 my-2 shadow-sm rounded-xl border bg-blue-50 border-blue-200 text-black">
-                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-black text-left">
+                      <div className="px-4 py-3 my-1 shadow-sm bg-blue-500 text-white rounded-2xl border border-blue-300">
+                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-left">
                           {msg.content}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 px-3">
+                      <div className="flex items-center gap-1.5 mt-0.5 px-3">
                         <Text className="text-xs text-gray-400 font-medium">
                           {msg.createdAt.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
                             hour: '2-digit',
@@ -853,19 +905,6 @@ export function ChatInterface({
                         </Text>
                         <Check className="w-3.5 h-3.5 text-gray-300" />
                       </div>
-                    </div>
-                    {/* Avatar for own message (right side) */}
-                    <div className="w-9 h-9 flex-shrink-0 mb-1">
-                      <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                        <AvatarImage 
-                          src={currentTeacher.avatar} 
-                          alt={currentTeacher.name}
-                          className="object-cover"
-                        />
-                        <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
-                          {currentTeacher.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
                     </div>
                   </div>
                 ))}
@@ -1401,36 +1440,59 @@ export function ChatInterface({
         </Collapse>
       </Drawer>
 
-      {/* Image Modal */}
+      {/* Image Modal with Zoom Controls */}
       <Modal
         open={imageModalVisible}
-        onCancel={() => setImageModalVisible(false)}
-        footer={[
-          <AntButton
-            key="download"
-            type="primary"
-            icon={<DownloadOutlined />}
-            href={selectedImage}
-            download
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {language === 'ja' ? 'ダウンロード' : 'Tải xuống'}
-          </AntButton>,
-          <AntButton key="close" onClick={() => setImageModalVisible(false)}>
-            {language === 'ja' ? '閉じる' : 'Đóng'}
-          </AntButton>
-        ]}
+        onCancel={() => {
+          setImageModalVisible(false);
+          setZoomLevel(1);
+        }}
+        footer={null}
         width="auto"
         centered
         className="image-preview-modal"
       >
-        <div className="flex justify-center items-center p-4">
-          <img 
-            src={selectedImage} 
-            alt="Preview" 
-            style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
-            className="rounded-lg"
-          />
+        <div>
+          <div className="flex gap-2 mb-4">
+            <AntButton
+              icon={<ZoomOut className="h-4 w-4" />}
+              onClick={() => setZoomLevel((prev) => Math.max(prev - 0.25, 0.5))}
+              title={language === 'ja' ? '縮小' : 'Thu nhỏ'}
+            />
+            <AntButton
+              icon={<ZoomIn className="h-4 w-4" />}
+              onClick={() => setZoomLevel((prev) => Math.min(prev + 0.25, 3))}
+              title={language === 'ja' ? '拡大' : 'Phóng to'}
+            />
+            <AntButton
+              icon={<Download className="h-4 w-4" />}
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = selectedImage;
+                link.download = selectedImage.split('/').pop() || 'image';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              title={language === 'ja' ? 'ダウンロード' : 'Tải xuống'}
+            />
+            <AntButton
+              icon={<XCircle className="h-4 w-4" />}
+              onClick={() => {
+                setImageModalVisible(false);
+                setZoomLevel(1);
+              }}
+              title={language === 'ja' ? '閉じる' : 'Đóng'}
+            />
+          </div>
+          <div className="flex justify-center items-center" style={{ minHeight: 300 }}>
+            <img
+              src={selectedImage}
+              alt="Preview"
+              className="max-w-full max-h-[70vh] rounded-lg shadow"
+              style={{ objectFit: 'contain', transform: `scale(${zoomLevel})` }}
+            />
+          </div>
         </div>
       </Modal>
 
@@ -1442,9 +1504,34 @@ export function ChatInterface({
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
         }}
-        onStartChat={(teacher) => {
+        onStartChat={async (teacher) => {
           setProfileModalOpen(false);
           setSelectedProfileTeacher(null);
+          
+          try {
+            // Call getThreadChat API to get or create thread
+            const response = await getThreadChat({ recipientId: teacher.id });
+            
+            if (response.success && response.data) {
+              const threadId = response.data._id;
+              if (onThreadCreated) {
+                onThreadCreated(threadId);
+              }
+            } else {
+              toast.error(
+                language === 'ja'
+                  ? 'スレッドの作成に失敗しました'
+                  : 'Không thể tạo cuộc trò chuyện'
+              );
+            }
+          } catch (error: any) {
+            console.error('Failed to get or create thread:', error);
+            toast.error(
+              language === 'ja'
+                ? `エラー: ${error.message}`
+                : `Lỗi: ${error.message}`
+            );
+          }
         }}
         language={language}
       />
