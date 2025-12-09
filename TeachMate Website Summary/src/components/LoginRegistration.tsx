@@ -86,16 +86,8 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
           nationality: formData.nationality
         });
 
-        // Auto-login after registration
-        const loginResponse = await login({
-          email: formData.email,
-          password: formData.password
-        });
-        await onLogin({
-          name: formData.name,
-          email: formData.email,
-          nationality: formData.nationality
-        }, loginResponse.data?.token);
+        // After successful registration, switch to login view instead of auto-login
+        setIsLogin(true);
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || err.message || 'An error occurred. Please try again.';
@@ -114,10 +106,6 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
       // Redirect to backend Google OAuth endpoint
       // Backend will redirect back to https://teach-mate-frontend.vercel.app/?token=${token}
       window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/google';
-    } else if (provider === 'facebook') {
-      // Redirect to backend Facebook OAuth endpoint
-      // Backend will redirect back to https://teach-mate-frontend.vercel.app/?token=${token}
-      window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/facebook';
     }
   };
 
@@ -256,19 +244,6 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
                 />
               </svg>
               {t.continueWithGoogle}
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleSocialLogin('facebook')}
-              className="w-full border-2 hover:bg-gray-50"
-              disabled={isLoading}
-            >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="#1877F2">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              {t.continueWithFacebook}
             </Button>
           </div>
         </div>

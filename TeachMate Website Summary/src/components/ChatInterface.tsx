@@ -238,6 +238,7 @@ interface ChatInterfaceProps {
     thread: any;
     messages: any[];
   } | null;
+  threadId?: string;
   isLoadingMessages?: boolean;
   onBack: () => void;
   onViewProfile: (teacher: Teacher) => void;
@@ -280,6 +281,7 @@ export function ChatInterface({
   currentTeacher,
   selectedTeacher,
   threadDetail,
+  threadId,
   isLoadingMessages = false,
   onBack,
   onViewProfile,
@@ -412,8 +414,11 @@ export function ChatInterface({
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
     
+    // Resolve thread id from detail or prop (URL)
+    const resolvedThreadId = threadDetail?.thread?._id || threadDetail?.thread?.id || threadId;
+
     // Require thread ID before sending
-    if (!threadDetail?.thread?._id) {
+    if (!resolvedThreadId) {
       toast.error(
         language === 'ja'
           ? 'スレッドIDが必要です'
@@ -430,7 +435,7 @@ export function ChatInterface({
       if (selectedFiles.length > 0) {
         const fileData = {
           content: newMessage.trim() || '',
-          threadId: threadDetail.thread._id,
+          threadId: resolvedThreadId,
           files: selectedFiles
         };
         response = await sendMessageWithFile(fileData);
@@ -438,7 +443,7 @@ export function ChatInterface({
         // Otherwise use regular sendMessage API
         const messageData = {
           content: newMessage,
-          threadId: threadDetail.thread._id
+          threadId: resolvedThreadId
         };
         response = await sendMessage(messageData);
       }
@@ -800,6 +805,8 @@ export function ChatInterface({
                   const isLastUserMessage = index === threadDetail.messages.length - 1 && isOwnMessage;
                   const senderAvatar = isOwnMessage ? currentTeacher.avatar : message.senderId.avatarUrl;
                   const senderName = isOwnMessage ? currentTeacher.name : message.senderId.name;
+                  const readByOthers = (message.readBy || []).some((reader: { _id: string }) => reader._id !== message.senderId._id);
+                  const timeLabel = dayjs(messageDate).format('HH:mm');
 
                   return (
                     <div
@@ -808,62 +815,10 @@ export function ChatInterface({
                         isOwnMessage ? 'justify-end' : 'justify-start'
                       } group`}
                     >
-                      <div className={`flex items-end gap-2 ${isOwnMessage ? 'flex-row' : 'flex-row'} max-w-[80%]`}>
-                        {/* Avatar only for the other participant */}
-                        {!isOwnMessage && (
-                          <div className="w-9 h-9 flex-shrink-0">
-                            <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
-                              <AvatarImage 
-                                src={senderAvatar || ''} 
-                                alt={senderName}
-                                className="object-cover"
-                              />
-                              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
-                                {senderName?.charAt(0).toUpperCase() || '?'}
-                              </AvatarFallback>
-                            </Avatar>
-                          </div>
-                        )}
-
-                        <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                          {/* Message header with timestamp */}
-                          <div className="flex items-center mb-1 text-xs text-gray-400 gap-2">
-                            <span className="font-medium">
-                              {isOwnMessage ? (language === 'ja' ? 'あなた' : 'Bạn') : senderName}
-                            </span>
-                            <span>•</span>
-                            <time>
-                              {formatDistanceToNow(messageDate, { addSuffix: true })}
-                            </time>
-                          </div>
-
-                          {/* Message content */}
-                          <div
-                            className="relative w-fit max-w-[70vw] px-4 py-3 shadow-sm bg-blue-500 text-white rounded-xl border border-blue-300"
-                          >
-                            <div className="text-[15px] leading-relaxed break-words text-left">
-                              {message.content && renderMessageWithLinks(message.content, (url) => {
-                                setSelectedImage(url);
-                                setImageModalVisible(true);
-                                setZoomLevel(1);
-                              })}
-                            </div>
-                            
-                            {/* Render attachments */}
-                            {message.attachments && message.attachments.length > 0 && (
-                              <div className={message.content?.trim() ? 'mt-2' : ''}>
-                                {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-0.5 px-1">
-                            <Text className="text-xs text-gray-400 font-medium">
-                              {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </Text>
+                      <div className={`flex flex-col gap-1 max-w-[80%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                        <div className={`flex items-center gap-2 px-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          <Text className="text-xs text-gray-400 font-medium">{timeLabel}</Text>
+                          {isOwnMessage && (
                             <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
                               <AntButton
                                 type="text"
@@ -874,11 +829,72 @@ export function ChatInterface({
                                 className="!p-0 text-red-500 hover:text-red-600"
                               />
                             </Tooltip>
-                            {isLastUserMessage && (
+                          )}
+                        </div>
+
+                        <div className={`flex items-start gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          {!isOwnMessage && (
+                            <div className="w-9 h-9 flex-shrink-0">
+                              <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
+                                <AvatarImage 
+                                  src={senderAvatar || ''} 
+                                  alt={senderName}
+                                  className="object-cover"
+                                />
+                                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
+                                  {senderName?.charAt(0).toUpperCase() || '?'}
+                                </AvatarFallback>
+                              </Avatar>
+                            </div>
+                          )}
+
+                          <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                            {/* Message content */}
+                            <div
+                              className="relative w-fit max-w-[70vw] px-4 py-3 shadow-sm bg-blue-500 text-white rounded-xl border border-blue-300"
+                            >
+                              <div className="text-[15px] leading-relaxed break-words text-left">
+                                {message.content && renderMessageWithLinks(message.content, (url) => {
+                                  setSelectedImage(url);
+                                  setImageModalVisible(true);
+                                  setZoomLevel(1);
+                                })}
+                              </div>
+                              
+                              {/* Render attachments */}
+                              {message.attachments && message.attachments.length > 0 && (
+                                <div className={message.content?.trim() ? 'mt-2' : ''}>
+                                  {message.attachments.map((attachment: { kind: string; mime: string; url: string }, idx: number) => renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {isOwnMessage && (
+                            <div className="w-9 h-9 flex-shrink-0">
+                              <Avatar className="w-9 h-9 ring-2 ring-white shadow-md">
+                                <AvatarImage 
+                                  src={senderAvatar || ''} 
+                                  alt={senderName}
+                                  className="object-cover"
+                                />
+                                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-500 text-white text-sm font-semibold">
+                                  {senderName?.charAt(0).toUpperCase() || '?'}
+                                </AvatarFallback>
+                              </Avatar>
+                            </div>
+                          )}
+                        </div>
+
+                        {isOwnMessage && (
+                          <div className="flex items-center gap-2 px-1 justify-end">
+                            {readByOthers ? (
+                              <Eye className="w-4 h-4 text-blue-200" />
+                            ) : (
                               <Check className="w-3.5 h-3.5 text-gray-300" />
                             )}
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -891,18 +907,22 @@ export function ChatInterface({
                   <div key={msg.id} className="flex items-end gap-2 message-bubble justify-end">
                     {/* Message Bubble (own, no avatar) */}
                     <div className="flex flex-col items-end max-w-[70%]">
-                      <div className="px-4 py-3 my-1 shadow-sm bg-blue-500 text-white rounded-2xl border border-blue-300">
-                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-left">
-                          {msg.content}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 px-3">
+                      <div className="flex items-center gap-1.5 px-3 justify-end mb-1">
                         <Text className="text-xs text-gray-400 font-medium">
                           {msg.createdAt.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
                         </Text>
+                      </div>
+
+                      <div className="px-4 py-3 my-1 shadow-sm bg-blue-500 text-white rounded-2xl border border-blue-300">
+                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-left">
+                          {msg.content}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 px-3 justify-end mt-1">
                         <Check className="w-3.5 h-3.5 text-gray-300" />
                       </div>
                     </div>

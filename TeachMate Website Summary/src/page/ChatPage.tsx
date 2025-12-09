@@ -172,6 +172,7 @@ export const ChatPage: React.FC = () => {
           threadDetail={threadDetailData?.success ? {
             thread: {
               id: threadDetailData.data.thread._id,
+              _id: threadDetailData.data.thread._id,
               name: threadDetailData.data.thread.name,
               avatar: threadDetailData.data.thread.avatar,
               type: threadDetailData.data.thread.type,
@@ -179,6 +180,7 @@ export const ChatPage: React.FC = () => {
             },
             messages: threadDetailData.data.messages
           } : null}
+            threadId={selectedThreadId || threadId || undefined}
           isLoadingMessages={isLoadingThreadDetail}
           onBack={handleBack}
           onViewProfile={handleViewProfile}

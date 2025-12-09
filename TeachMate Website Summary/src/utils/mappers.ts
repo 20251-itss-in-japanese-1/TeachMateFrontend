@@ -48,11 +48,13 @@ export function mapFriendRequestData(requests: any[]): Array<{
  */
 export function mapThreadData(threads: any[], currentUserId?: string) {
   return threads.map(thread => {
+    const createdById = thread.createdBy?._id;
     const threadData: any = {
       id: thread._id,
       type: thread.type,
       name: thread.name,
       avatar: thread.avatar,
+      createdById,
       members: thread.members,
       unreadCount: thread.unreadCount || 0,
       isLastMessageRead: thread.isLastMessageRead || false,

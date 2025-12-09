@@ -20,6 +20,7 @@ interface Thread {
   type: 'direct_friend' | 'direct_stranger' | 'group';
   name?: string;
   avatar?: string;
+   createdById?: string;
   otherUser?: Teacher;
   lastMessage?: {
     id: string;

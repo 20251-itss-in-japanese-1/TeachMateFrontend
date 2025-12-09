@@ -38,6 +38,7 @@ interface Thread {
   type: 'direct_friend' | 'direct_stranger' | 'group';
   name?: string;
   avatar?: string;
+  createdById?: string;
   otherUser?: Teacher;
   lastMessage?: {
     id: string;
@@ -159,7 +160,26 @@ export function SecondarySidebar({
     friend.specialties.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const filteredThreads = threads.filter(thread => {
+  // Split threads: keep direct_stranger threads (from getThreads) where last sender is not the current user in the stranger bucket
+  const { primaryThreads, strangerThreadsFromFeed } = useMemo(() => {
+    const stranger: Thread[] = [];
+    const primary: Thread[] = [];
+
+    threads.forEach((thread) => {
+      const isDirectStranger = thread.type === 'direct_stranger';
+      const isCreatedByCurrentUser = thread.createdById === currentUserId;
+
+      if (isDirectStranger && !isCreatedByCurrentUser) {
+        stranger.push(thread);
+      } else {
+        primary.push(thread);
+      }
+    });
+
+    return { primaryThreads: primary, strangerThreadsFromFeed: stranger };
+  }, [threads, currentUserId]);
+
+  const filteredThreads = primaryThreads.filter(thread => {
     const name = thread.name || '';
     const lastMessageContent = thread.lastMessage?.content || '';
     return searchQuery === '' ||
@@ -176,11 +196,19 @@ export function SecondarySidebar({
     return [];
   }, [strangerThreadsData, currentUserId]);
 
-  const hasStrangerData = strangerThreadsData?.success && strangerThreads.length > 0;
-  const initialStrangerLoading = showStrangerThreads && isLoadingStrangers && !hasStrangerData;
-  const showStrangerFetching = showStrangerThreads && isFetchingStrangers && hasStrangerData;
+  // Merge stranger threads coming from both the dedicated endpoint and the main threads feed
+  const mergedStrangerThreads = useMemo(() => {
+    const map = new Map<string, Thread>();
+    strangerThreadsFromFeed.forEach((t) => map.set(t.id, t));
+    strangerThreads.forEach((t) => map.set(t.id, t));
+    return Array.from(map.values());
+  }, [strangerThreadsFromFeed, strangerThreads]);
 
-  const filteredStrangerThreads = strangerThreads.filter(thread => {
+  const hasStrangerData = (strangerThreadsData?.success && strangerThreads.length > 0) || strangerThreadsFromFeed.length > 0;
+  const initialStrangerLoading = showStrangerThreads && isLoadingStrangers && !hasStrangerData;
+  const showStrangerFetching = showStrangerThreads && isFetchingStrangers && strangerThreads.length > 0;
+
+  const filteredStrangerThreads = mergedStrangerThreads.filter(thread => {
     const name = thread.name || '';
     const lastMessageContent = thread.lastMessage?.content || '';
     return searchQuery === '' ||
