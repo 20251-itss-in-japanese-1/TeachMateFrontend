@@ -1048,16 +1048,6 @@ export function GroupChatInterface({
                   key={message._id}
                   className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} mb-3 group max-w-[80%] ${isOwnMessage ? 'ml-auto' : 'mr-auto'}`}
                 >
-                  {/* Thời gian ở trên */}
-                  <div className={`flex items-center gap-2 px-1 mb-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                    <Text className="text-xs text-gray-400">
-                      {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </Text>
-                  </div>
-
                   {/* Tin nhắn, nút xóa, avatar cùng dòng */}
                   <div className={`flex items-start gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                     {/* Avatar for other users (left side) */}
@@ -1150,17 +1140,6 @@ export function GroupChatInterface({
                           )}
                         </div>
                       )}
-                      
-                      {/* Trạng thái xem/đã xem dưới tin nhắn, căn lề phải */}
-                      {isOwnMessage && isLastUserMessage && (
-                        <div className="flex items-center justify-end px-1 mt-1 w-full">
-                          {message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
-                            <Eye className="w-3.5 h-3.5 text-blue-400" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5 text-gray-400" />
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     {/* Avatar for own message (right side) */}
@@ -1179,6 +1158,25 @@ export function GroupChatInterface({
                           </Avatar>
                         ) : (
                           <div className="w-8 h-8" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Thời gian dưới bên trái, status dưới bên phải */}
+                  <div className={`flex items-center justify-between w-full px-1 mt-1 gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                    <Text className="text-xs text-gray-400">
+                      {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </Text>
+                    {isOwnMessage && isLastUserMessage && (
+                      <div className="flex items-center">
+                        {message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
+                          <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-gray-400" />
                         )}
                       </div>
                     )}

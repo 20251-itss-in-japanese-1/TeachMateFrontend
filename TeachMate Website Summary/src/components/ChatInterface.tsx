@@ -816,11 +816,6 @@ export function ChatInterface({
                       } group`}
                     >
                       <div className={`flex flex-col gap-1 max-w-[80%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                        {/* Thời gian ở trên */}
-                        <div className={`flex items-center gap-2 px-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                          <Text className="text-xs text-gray-400 font-medium">{timeLabel}</Text>
-                        </div>
-
                         {/* Tin nhắn, nút xóa, avatar cùng dòng */}
                         <div className={`flex items-start gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                           {!isOwnMessage && (
@@ -872,17 +867,6 @@ export function ChatInterface({
                                 </div>
                               )}
                             </div>
-                            
-                            {/* Trạng thái xem/đã xem dưới tin nhắn, căn lề phải */}
-                            {isOwnMessage && (
-                              <div className="flex items-center justify-end px-1 mt-1 w-full">
-                                {readByOthers ? (
-                                  <Eye className="w-4 h-4 text-blue-400" />
-                                ) : (
-                                  <Check className="w-3.5 h-3.5 text-gray-400" />
-                                )}
-                              </div>
-                            )}
                           </div>
 
                           {isOwnMessage && (
@@ -897,6 +881,20 @@ export function ChatInterface({
                                   {senderName?.charAt(0).toUpperCase() || '?'}
                                 </AvatarFallback>
                               </Avatar>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thời gian dưới bên trái, status dưới bên phải */}
+                        <div className={`flex items-center justify-between w-full px-1 mt-1 gap-2`}>
+                          <Text className="text-xs text-gray-400 font-medium">{timeLabel}</Text>
+                          {isOwnMessage && (
+                            <div className="flex items-center">
+                              {readByOthers ? (
+                                <Eye className="w-4 h-4 text-blue-400" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5 text-gray-400" />
+                              )}
                             </div>
                           )}
                         </div>
