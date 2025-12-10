@@ -1140,6 +1140,27 @@ export function GroupChatInterface({
                           )}
                         </div>
                       )}
+                      
+                      {/* Thời gian và trạng thái xem/đã xem dưới tin nhắn, căn lề phải */}
+                      {isOwnMessage && (
+                        <div className="flex items-center justify-end gap-2 px-1 mt-1">
+                          <Text className="text-xs text-gray-400">
+                            {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </Text>
+                          {isLastUserMessage && (
+                            <div className="flex items-center">
+                              {message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
+                                <Eye className="w-3.5 h-3.5 text-blue-400" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5 text-gray-400" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Avatar for own message (right side) */}
@@ -1163,24 +1184,6 @@ export function GroupChatInterface({
                     )}
                   </div>
 
-                  {/* Thời gian dưới bên trái, status dưới bên phải */}
-                  <div className={`flex items-center justify-between w-full px-1 mt-1 gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-                    <Text className="text-xs text-gray-400">
-                      {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </Text>
-                    {isOwnMessage && isLastUserMessage && (
-                      <div className="flex items-center">
-                        {message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
-                          <Eye className="w-3.5 h-3.5 text-blue-400" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5 text-gray-400" />
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </div>
               );
             })}
