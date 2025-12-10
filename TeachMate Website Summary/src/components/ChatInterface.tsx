@@ -818,18 +818,6 @@ export function ChatInterface({
                       <div className={`flex flex-col gap-1 max-w-[80%] ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                         <div className={`flex items-center gap-2 px-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                           <Text className="text-xs text-gray-400 font-medium">{timeLabel}</Text>
-                          {isOwnMessage && (
-                            <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
-                              <AntButton
-                                type="text"
-                                size="small"
-                                icon={<DeleteOutlined />}
-                                loading={deletingMessageId === message._id}
-                                onClick={() => confirmDeleteMessage(message._id)}
-                                className="!p-0 text-red-500 hover:text-red-600"
-                              />
-                            </Tooltip>
-                          )}
                         </div>
 
                         <div className={`flex items-start gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -868,7 +856,29 @@ export function ChatInterface({
                                 </div>
                               )}
                             </div>
+                            
+                            {/* Trạng thái xem và nút xóa dưới tin nhắn */}
+                            <div className="flex items-center gap-2 px-1 mt-1">
+                              {isOwnMessage && readByOthers ? (
+                                <Eye className="w-4 h-4 text-blue-400" />
+                              ) : isOwnMessage ? (
+                                <Check className="w-3.5 h-3.5 text-gray-400" />
+                              ) : null}
+                            </div>
                           </div>
+
+                          {isOwnMessage && (
+                            <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
+                              <AntButton
+                                type="text"
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                loading={deletingMessageId === message._id}
+                                onClick={() => confirmDeleteMessage(message._id)}
+                                className="!p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              />
+                            </Tooltip>
+                          )}
 
                           {isOwnMessage && (
                             <div className="w-9 h-9 flex-shrink-0">
@@ -885,16 +895,6 @@ export function ChatInterface({
                             </div>
                           )}
                         </div>
-
-                        {isOwnMessage && (
-                          <div className="flex items-center gap-2 px-1 justify-end">
-                            {readByOthers ? (
-                              <Eye className="w-4 h-4 text-blue-200" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5 text-gray-300" />
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   );

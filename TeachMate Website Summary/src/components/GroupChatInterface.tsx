@@ -1124,6 +1124,8 @@ export function GroupChatInterface({
                         )}
                       </div>
                     )}
+                    
+                    {/* Thời gian và trạng thái xem dưới tin nhắn */}
                     <div className="flex items-center gap-2 mt-1 px-2">
                       <Text className="text-xs text-gray-400">
                         {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
@@ -1131,17 +1133,7 @@ export function GroupChatInterface({
                           minute: '2-digit'
                         })}
                       </Text>
-                      <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
-                        <AntButton
-                          type="text"
-                          size="small"
-                          icon={<DeleteOutlined />}
-                          loading={deletingMessageId === message._id}
-                          onClick={() => confirmDeleteMessage(message._id)}
-                          className="!p-0 text-red-500 hover:text-red-600"
-                        />
-                      </Tooltip>
-                      {isLastUserMessage && (
+                      {isOwnMessage && isLastUserMessage && (
                         message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
                           <Eye className="w-3.5 h-3.5 text-blue-400" />
                         ) : (
@@ -1150,6 +1142,20 @@ export function GroupChatInterface({
                       )}
                     </div>
                   </div>
+
+                  {/* Nút xóa bên cạnh tin nhắn */}
+                  {isOwnMessage && (
+                    <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
+                      <AntButton
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        loading={deletingMessageId === message._id}
+                        onClick={() => confirmDeleteMessage(message._id)}
+                        className="!p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      />
+                    </Tooltip>
+                  )}
 
                   {/* Avatar for own message (right side) */}
                   {isOwnMessage && (
