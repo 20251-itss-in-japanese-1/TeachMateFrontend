@@ -1046,136 +1046,143 @@ export function GroupChatInterface({
               return (
                 <div
                   key={message._id}
-                  className={`flex items-end gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'} group`}
+                  className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} mb-3 group max-w-[80%] ${isOwnMessage ? 'ml-auto' : 'mr-auto'}`}
                 >
-                  {/* Avatar for other users (left side) */}
-                  {!isOwnMessage && (
-                    <div className="w-8 h-8 flex-shrink-0">
-                      {showAvatar ? (
-                        <Avatar 
-                          className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                          onClick={() => {
-                            const member = groupMembers.find(m => m.id === message.senderId._id);
-                            if (member) {
-                              setSelectedProfileTeacher(member);
-                              setProfileModalOpen(true);
-                            } else {
-                              setSelectedProfileTeacher({
-                                id: message.senderId._id,
-                                name: message.senderId.name,
-                                avatar: message.senderId.avatarUrl || '',
-                                nationality: 'Japanese',
-                                specialties: [],
-                                experience: 0,
-                                interests: [],
-                                bio: '',
-                                subjects: []
-                              });
-                              setProfileModalOpen(true);
-                            }
-                          }}
-                        >
-                          <AvatarImage 
-                            src={message.senderId?.avatarUrl || ''} 
-                            alt={message.senderId?.name || ''}
-                            className="object-cover"
-                          />
-                          <AvatarFallback className="bg-purple-500 text-white text-xs">
-                            {(message.senderId?.name || '?').charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : (
-                        <div className="w-8 h-8" />
-                      )}
-                    </div>
-                  )}
+                  {/* Thời gian ở trên */}
+                  <div className={`flex items-center gap-2 px-1 mb-1 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    <Text className="text-xs text-gray-400">
+                      {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </Text>
+                  </div>
 
-                  {/* Message Bubble */}
-                  <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                    {/* Sender name for group - only show for others */}
-                    {!isOwnMessage && showAvatar && (
-                      <Text className="text-xs text-gray-500 mb-1 px-3">
-                        {message.senderId.name}
-                      </Text>
-                    )}
-
-                    {(message.content?.trim() || (message.attachments && message.attachments.length > 0)) && (
-                      <div
-                        className={`relative w-fit max-w-[70vw] px-4 py-3 shadow-sm rounded-xl border ${
-                          isOwnMessage
-                            ? 'bg-blue-500 text-white border-blue-300'
-                            : 'bg-gray-100 text-gray-900 border-gray-200'
-                        }`}
-                      >
-                        {message.content && message.content.trim() && (
-                          <div className="text-[15px] leading-relaxed break-words text-left">
-                            {renderMessageWithLinks(message.content, (url) => {
-                              setSelectedImage(url);
-                              setImageModalVisible(true);
-                            })}
-                          </div>
-                        )}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div className={message.content?.trim() ? 'mt-2' : ''}>
-                            {message.attachments.map((attachment: any, idx: number) =>
-                              renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage)
-                            )}
-                          </div>
+                  {/* Tin nhắn, nút xóa, avatar cùng dòng */}
+                  <div className={`flex items-start gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    {/* Avatar for other users (left side) */}
+                    {!isOwnMessage && (
+                      <div className="w-8 h-8 flex-shrink-0">
+                        {showAvatar ? (
+                          <Avatar 
+                            className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                            onClick={() => {
+                              const member = groupMembers.find(m => m.id === message.senderId._id);
+                              if (member) {
+                                setSelectedProfileTeacher(member);
+                                setProfileModalOpen(true);
+                              } else {
+                                setSelectedProfileTeacher({
+                                  id: message.senderId._id,
+                                  name: message.senderId.name,
+                                  avatar: message.senderId.avatarUrl || '',
+                                  nationality: 'Japanese',
+                                  specialties: [],
+                                  experience: 0,
+                                  interests: [],
+                                  bio: '',
+                                  subjects: []
+                                });
+                                setProfileModalOpen(true);
+                              }
+                            }}
+                          >
+                            <AvatarImage 
+                              src={message.senderId?.avatarUrl || ''} 
+                              alt={message.senderId?.name || ''}
+                              className="object-cover"
+                            />
+                            <AvatarFallback className="bg-purple-500 text-white text-xs">
+                              {(message.senderId?.name || '?').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <div className="w-8 h-8" />
                         )}
                       </div>
                     )}
-                    
-                    {/* Thời gian và trạng thái xem dưới tin nhắn */}
-                    <div className="flex items-center gap-2 mt-1 px-2">
-                      <Text className="text-xs text-gray-400">
-                        {messageDate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </Text>
+
+                    {/* Nút xóa bên trái tin nhắn, cùng dòng với avatar */}
+                    {isOwnMessage && (
+                      <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
+                        <AntButton
+                          type="text"
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          loading={deletingMessageId === message._id}
+                          onClick={() => confirmDeleteMessage(message._id)}
+                          className="!p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity self-center"
+                        />
+                      </Tooltip>
+                    )}
+
+                    {/* Message Bubble */}
+                    <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                      {/* Sender name for group - only show for others */}
+                      {!isOwnMessage && showAvatar && (
+                        <Text className="text-xs text-gray-500 mb-1 px-3">
+                          {message.senderId.name}
+                        </Text>
+                      )}
+
+                      {(message.content?.trim() || (message.attachments && message.attachments.length > 0)) && (
+                        <div
+                          className={`relative w-fit max-w-[70vw] px-4 py-3 shadow-sm rounded-xl border ${
+                            isOwnMessage
+                              ? 'bg-blue-500 text-white border-blue-300'
+                              : 'bg-gray-100 text-gray-900 border-gray-200'
+                          }`}
+                        >
+                          {message.content && message.content.trim() && (
+                            <div className="text-[15px] leading-relaxed break-words text-left">
+                              {renderMessageWithLinks(message.content, (url) => {
+                                setSelectedImage(url);
+                                setImageModalVisible(true);
+                              })}
+                            </div>
+                          )}
+                          {message.attachments && message.attachments.length > 0 && (
+                            <div className={message.content?.trim() ? 'mt-2' : ''}>
+                              {message.attachments.map((attachment: any, idx: number) =>
+                                renderAttachment(attachment, idx, setImageModalVisible, setSelectedImage)
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Trạng thái xem/đã xem dưới tin nhắn, căn lề phải */}
                       {isOwnMessage && isLastUserMessage && (
-                        message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
-                          <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        <div className="flex items-center justify-end px-1 mt-1 w-full">
+                          {message.readBy && message.readBy.some((reader: any) => reader._id !== currentUser.id) ? (
+                            <Eye className="w-3.5 h-3.5 text-blue-400" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5 text-gray-400" />
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Avatar for own message (right side) */}
+                    {isOwnMessage && (
+                      <div className="w-8 h-8 flex-shrink-0">
+                        {showAvatar ? (
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage 
+                              src={currentUser.avatar || ''} 
+                              alt={currentUser.name || ''}
+                              className="object-cover"
+                            />
+                            <AvatarFallback className="bg-blue-600 text-white text-xs">
+                              {(currentUser.name || '?').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
                         ) : (
-                          <Check className="w-3.5 h-3.5 text-gray-400" />
-                        )
-                      )}
-                    </div>
+                          <div className="w-8 h-8" />
+                        )}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Nút xóa bên cạnh tin nhắn */}
-                  {isOwnMessage && (
-                    <Tooltip title={language === 'ja' ? 'メッセージを削除' : 'Xóa tin nhắn'}>
-                      <AntButton
-                        type="text"
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        loading={deletingMessageId === message._id}
-                        onClick={() => confirmDeleteMessage(message._id)}
-                        className="!p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                      />
-                    </Tooltip>
-                  )}
-
-                  {/* Avatar for own message (right side) */}
-                  {isOwnMessage && (
-                    <div className="w-8 h-8 flex-shrink-0">
-                      {showAvatar ? (
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage 
-                            src={currentUser.avatar || ''} 
-                            alt={currentUser.name || ''}
-                            className="object-cover"
-                          />
-                          <AvatarFallback className="bg-blue-600 text-white text-xs">
-                            {(currentUser.name || '?').charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : (
-                        <div className="w-8 h-8" />
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
