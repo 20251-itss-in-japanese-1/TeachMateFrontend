@@ -9,6 +9,10 @@ export async function getThreadsStrangers() {
     const res = Http.get<ThreadsResponse>('/thread/strangers');
     return res.then(response => response.data);
 }
+export async function getThreadGroups() {
+    const res = Http.get<ThreadsResponse>('/thread/group');
+    return res.then(response => response.data);
+}
 export async function getThreadDetail(threadId: string) {
     const res = Http.get<ThreadDetailResponse>(`/thread/${threadId}`);
     return res.then(response => response.data);

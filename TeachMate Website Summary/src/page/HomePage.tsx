@@ -1,16 +1,84 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { Homepage } from '../components/Homepage';
-import { mockGroups, mockSessions, mockAppointments } from '../data/mockData';
+import { mockSessions } from '../data/mockData';
 import { useNavigate } from 'react-router-dom';
-import { Teacher } from '../types';
+import { Appointment, Teacher } from '../types';
 import { toast } from 'sonner';
 import { sendFriendRequest } from '../apis/friend.api';
 import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
+import { Schedule } from '../types/schedule.type';
+import { useUserSchedules } from '../hooks/useUserSchedules';
+import { useThreadGroups } from '../hooks/useThreadGroups';
+
+const mapThreadGroupToDisplay = (group: any) => ({
+  id: group._id || group.id || '',
+  name: group.name || 'Group',
+  memberCount: Array.isArray(group.members) ? group.members.length : 0,
+  avatar: group.avatar || '',
+  description: group.lastMessage?.content || '',
+});
+
+const mapScheduleToAppointment = (schedule: Schedule): Appointment => {
+  const parseDateTime = () => {
+    if (schedule.startAt) {
+      return new Date(schedule.startAt);
+    }
+    if (schedule.date && schedule.time) {
+      const [day, month, year] = schedule.date.split('/').map(Number);
+      const [hour, minute] = schedule.time.split(':').map(Number);
+      return new Date(year, (month || 1) - 1, day || 1, hour || 0, minute || 0);
+    }
+    return new Date();
+  };
+
+  const start = parseDateTime();
+  const status: Appointment['status'] = schedule.status === 'completed'
+    ? 'completed'
+    : schedule.status === 'cancelled'
+      ? 'cancelled'
+      : 'upcoming';
+
+  return {
+    id: schedule._id,
+    teacher1Id: schedule.userId || '',
+    teacher2Id: schedule.threadId || '',
+    title: schedule.title,
+    date: start,
+    time: schedule.time || start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    description: schedule.description || '',
+    status,
+    createdAt: schedule.createdAt ? new Date(schedule.createdAt) : new Date(),
+  };
+};
 
 export const HomePage: React.FC = () => {
   const { currentUser, language, refetchFriendList, refetchFriendRequests, setFriends } = useAppContext();
   const navigate = useNavigate();
+  const {
+    data: scheduleData,
+    isLoading: isLoadingSchedules,
+  } = useUserSchedules({ upcoming: true }, !!currentUser);
+
+  const {
+    data: groupData,
+    isLoading: isLoadingGroups,
+    refetch: refetchGroups,
+  } = useThreadGroups(!!currentUser);
+
+  const appointments: Appointment[] = useMemo(() => {
+    if (scheduleData?.success && Array.isArray(scheduleData.data)) {
+      return scheduleData.data.map(mapScheduleToAppointment);
+    }
+    return [];
+  }, [scheduleData]);
+
+  const groups = useMemo(() => {
+    if (groupData?.success && Array.isArray(groupData.data)) {
+      return groupData.data.slice(0, 10).map(mapThreadGroupToDisplay);
+    }
+    return [];
+  }, [groupData]);
 
   const handleSendFriendRequest = async (teacher: Teacher) => {
     try {
@@ -85,8 +153,9 @@ export const HomePage: React.FC = () => {
     navigate(`/profile/${teacher.id}`, { state: { teacher } });
   };
 
-  const handleJoinGroup = (groupId: string) => {
-    const group = mockGroups.find(g => g.id === groupId);
+  const handleJoinGroup = async (groupId: string) => {
+    await refetchGroups();
+    const group = groups.find(g => g.id === groupId);
     if (group) {
       toast.success(
         language === 'ja'
@@ -104,9 +173,9 @@ export const HomePage: React.FC = () => {
     <Homepage
       user={currentUser}
       language={language}
-      groups={mockGroups}
+      groups={groups}
       exchangeSessions={mockSessions}
-      appointments={mockAppointments}
+      appointments={appointments}
       onSendFriendRequest={handleSendFriendRequest}
       onViewTeacherProfile={handleViewTeacherProfile}
       onJoinGroup={handleJoinGroup}

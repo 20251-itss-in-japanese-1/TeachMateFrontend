@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Teacher, Message } from '../types';
 import { 
   Input as AntInput, 
@@ -15,7 +15,8 @@ import {
   DatePicker,
   Typography,
   Divider,
-  Popover
+  Popover,
+  Spin
 } from 'antd';
 import { 
   SendOutlined, 
@@ -51,6 +52,8 @@ import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
 import { TeacherProfile } from './TeacherProfile';
 import { useThreadAttachments } from '../hooks/useThreadAttachments';
+import { getThreadSchedules, joinSchedule } from '../apis/schedule.api';
+import { Schedule } from '../types/schedule.type';
 
 const { Panel } = Collapse;
 const { TextArea } = AntInput;
@@ -260,13 +263,6 @@ interface EnhancedMessage extends Message {
   reactions?: MessageReaction[];
 }
 
-interface Reminder {
-  id: string;
-  date: Date;
-  time: string;
-  content: string;
-}
-
 interface SharedMedia {
   id: string;
   type: 'image' | 'video' | 'file' | 'link';
@@ -359,10 +355,9 @@ export function ChatInterface({
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   
   // Mock data
-  const [reminders] = useState<Reminder[]>([
-    { id: '1', date: new Date('2025-10-22T14:00:00'), time: '14:00', content: 'Thảo luận phương pháp giảng dạy Toán' },
-    { id: '2', date: new Date('2025-10-25T10:30:00'), time: '10:30', content: 'Chia sẻ tài liệu STEM' }
-  ]);
+  const [threadSchedules, setThreadSchedules] = useState<Schedule[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
   
   // Convert API attachments to SharedMedia format
   const sharedMedia: SharedMedia[] = React.useMemo(() => {
@@ -410,6 +405,79 @@ export function ChatInterface({
     { id: '1', name: 'Mathematics Education Exchange', memberCount: 124 },
     { id: '3', name: 'STEM Education Innovation', memberCount: 189 }
   ]);
+
+  const resolvedThreadId = useMemo(() => {
+    return threadDetail?.thread?._id || threadDetail?.thread?.id || threadId;
+  }, [threadDetail, threadId]);
+
+  useEffect(() => {
+    if (!resolvedThreadId) return;
+
+    let active = true;
+    const fetchSchedules = async () => {
+      setLoadingSchedules(true);
+      try {
+        const res = await getThreadSchedules(resolvedThreadId, { upcoming: true });
+        if (active && res.success && Array.isArray(res.data)) {
+          setThreadSchedules(res.data as Schedule[]);
+        }
+      } catch (error: any) {
+        if (!active) return;
+        const message = error?.response?.data?.message || error.message || 'Failed to load schedules';
+        toast.error(
+          language === 'ja'
+            ? `スケジュールの取得に失敗しました: ${message}`
+            : `Không thể tải lịch hẹn: ${message}`
+        );
+        setThreadSchedules([]);
+      } finally {
+        if (active) setLoadingSchedules(false);
+      }
+    };
+
+    fetchSchedules();
+    return () => {
+      active = false;
+    };
+  }, [resolvedThreadId, language]);
+
+  const formatScheduleDate = (schedule: Schedule) => {
+    if (schedule.startAt) return dayjs(schedule.startAt);
+    if (schedule.date && schedule.time) {
+      const [day, month, year] = schedule.date.split('/').map(Number);
+      const [hour, minute] = schedule.time.split(':').map(Number);
+      return dayjs(new Date(year, (month || 1) - 1, day || 1, hour || 0, minute || 0));
+    }
+    return null;
+  };
+
+  const handleJoinSchedule = async (scheduleId: string) => {
+    if (!scheduleId) return;
+    setJoiningId(scheduleId);
+    try {
+      const res = await joinSchedule(scheduleId);
+      if (res.success) {
+        toast.success(
+          language === 'ja' ? 'スケジュールに参加しました' : 'Đã tham gia lịch hẹn'
+        );
+        if (resolvedThreadId) {
+          const refreshed = await getThreadSchedules(resolvedThreadId, { upcoming: true });
+          if (refreshed.success && Array.isArray(refreshed.data)) {
+            setThreadSchedules(refreshed.data);
+          }
+        }
+      } else {
+        toast.error(res.message || (language === 'ja' ? '参加に失敗しました' : 'Tham gia thất bại'));
+      }
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error.message;
+      toast.error(
+        language === 'ja' ? `参加に失敗しました: ${msg}` : `Tham gia thất bại: ${msg}`
+      );
+    } finally {
+      setJoiningId(null);
+    }
+  };
 
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && selectedFiles.length === 0) || isSending) return;
@@ -1248,29 +1316,54 @@ export function ChatInterface({
             } 
             key="1"
           >
-            {reminders.length === 0 ? (
-              <Empty description={language === 'ja' ? 'リマインダーなし' : 'Chưa có lời nhắc'} />
+            {loadingSchedules ? (
+              <div className="py-4 flex justify-center"><Spin /></div>
+            ) : threadSchedules.length === 0 ? (
+              <Empty description={language === 'ja' ? '予定がありません' : 'Chưa có lịch hẹn'} />
             ) : (
               <List
                 size="small"
-                dataSource={reminders}
-                renderItem={(reminder: Reminder) => (
-                  <List.Item className="hover:bg-gray-50 rounded-lg transition-colors px-2">
-                    <List.Item.Meta
-                      avatar={
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <CalendarOutlined className="text-blue-600" />
-                        </div>
-                      }
-                      title={<span className="font-medium text-gray-800">{reminder.content}</span>}
-                      description={
-                        <span className="text-gray-500 text-sm">
-                          {`${dayjs(reminder.date).format('DD/MM/YYYY')} ${reminder.time}`}
-                        </span>
-                      }
-                    />
-                  </List.Item>
-                )}
+                dataSource={threadSchedules}
+                renderItem={(schedule: Schedule) => {
+                  const dt = formatScheduleDate(schedule);
+                  const statusColor =
+                    schedule.status === 'completed' ? 'green' : schedule.status === 'cancelled' ? 'red' : 'blue';
+                  return (
+                    <List.Item
+                      className="hover:bg-gray-50 rounded-lg transition-colors px-2"
+                      actions={[
+                        <AntButton
+                          key="join"
+                          type="link"
+                          size="small"
+                          loading={joiningId === schedule._id}
+                          onClick={() => handleJoinSchedule(schedule._id)}
+                        >
+                          {language === 'ja' ? '参加' : 'Tham gia'}
+                        </AntButton>
+                      ]}
+                    >
+                      <List.Item.Meta
+                        avatar={
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <CalendarOutlined className="text-blue-600" />
+                          </div>
+                        }
+                        title={
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-gray-800">{schedule.title}</span>
+                            {schedule.status && <Tag color={statusColor}>{schedule.status}</Tag>}
+                          </div>
+                        }
+                        description={
+                          <span className="text-gray-500 text-sm">
+                            {dt ? dt.format('DD/MM/YYYY HH:mm') : schedule.time || ''}
+                          </span>
+                        }
+                      />
+                    </List.Item>
+                  );
+                }}
               />
             )}
           </Panel>
