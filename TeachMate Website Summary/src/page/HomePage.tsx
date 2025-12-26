@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Appointment, Teacher } from '../types';
 import { toast } from 'sonner';
 import { sendFriendRequest } from '../apis/friend.api';
+import { joinThreadGroup } from '../apis/thread.api';
 import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
 import { Schedule } from '../types/schedule.type';
 import { useUserSchedules } from '../hooks/useUserSchedules';
@@ -154,13 +155,26 @@ export const HomePage: React.FC = () => {
   };
 
   const handleJoinGroup = async (groupId: string) => {
-    await refetchGroups();
-    const group = groups.find(g => g.id === groupId);
-    if (group) {
-      toast.success(
+    try {
+      const res = await joinThreadGroup(groupId);
+      if (res.success) {
+        await refetchGroups();
+        const group = groups.find(g => g.id === groupId);
+        toast.success(
+          language === 'ja'
+            ? `${group?.name || 'グループ'}に参加しました`
+            : `Đã tham gia ${group?.name || 'nhóm'}`
+        );
+        navigate(`/chat/${res.data}`);
+      } else {
+        toast.error(res.message || (language === 'ja' ? '参加に失敗しました' : 'Tham gia thất bại'));
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.message || error.message;
+      toast.error(
         language === 'ja'
-          ? `${group.name}に参加しました`
-          : `Đã tham gia ${group.name}`
+          ? `エラー: ${message}`
+          : `Lỗi: ${message}`
       );
     }
   };

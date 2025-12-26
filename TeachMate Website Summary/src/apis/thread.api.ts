@@ -23,6 +23,17 @@ export async function createThreadGroup(name: string, memberIds: string[]) {
     return res.then(response => response.data);
 }
 
+export interface JoinThreadGroupResponse {
+    success: boolean;
+    message: string;
+    data: string;
+}
+
+export async function joinThreadGroup(threadId: string) {
+    const res = Http.post<JoinThreadGroupResponse>('/thread/join-group', { threadId });
+    return res.then(response => response.data);
+}
+
 export interface ThreadAttachmentsResponse {
     success: boolean;
     message: string;

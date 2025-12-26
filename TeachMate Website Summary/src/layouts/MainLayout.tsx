@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
 import { PrimaryNavbar } from '../components/PrimaryNavbar';
@@ -9,7 +9,6 @@ import { UserProfileEdit } from '../components/UserProfileEdit';
 import { UserProfileView } from '../components/UserProfileView';
 import { AddFriendModal } from '../components/AddFriendModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
-import { mockGroups } from '../data/mockData';
 import { translations } from '../translations';
 import { Teacher } from '../types';
 import { toast } from 'sonner';
@@ -17,6 +16,7 @@ import { acceptFriendRequest, rejectFriendRequest, sendFriendRequest } from '../
 import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
 import { removeTokenFromLocalStorage } from '../apis/localtoken';
 import { getThreadChat } from '../apis/chat.api';
+import { useThreadGroups } from '../hooks/useThreadGroups';
 
 type ViewType = 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
 
@@ -47,6 +47,21 @@ export const MainLayout: React.FC = () => {
   const [isViewingProfile, setIsViewingProfile] = useState(false);
   const [isAddFriendModalOpen, setIsAddFriendModalOpen] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+
+  const { data: threadGroupsData, isLoading: isLoadingThreadGroups } = useThreadGroups(!!currentUser);
+
+  const sidebarGroups = useMemo(() => {
+    if (threadGroupsData?.success && Array.isArray(threadGroupsData.data)) {
+      return threadGroupsData.data.map((group: any) => ({
+        id: group._id || group.id || '',
+        name: group.name || 'Group',
+        memberCount: Array.isArray(group.members) ? group.members.length : 0,
+        avatar: group.avatar || '',
+        description: group.lastMessage?.content || '',
+      }));
+    }
+    return [] as Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
+  }, [threadGroupsData]);
 
   const t = translations[language];
 
@@ -270,7 +285,7 @@ export const MainLayout: React.FC = () => {
           view={activeView as 'chat' | 'contacts'}
           language={language}
           friends={friends}
-          groups={mockGroups}
+          groups={sidebarGroups}
           friendRequests={friendRequests}
           threads={threads}
           isLoadingThreads={false}

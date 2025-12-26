@@ -12,6 +12,7 @@ import { Teacher } from '../types';
 import { reportUser } from '../apis/user.api';
 import { sendFriendRequest } from '../apis/friend.api';
 import { useThreadsStrangers } from '../hooks/useThreadsStrangers';
+import { useThreadGroups } from '../hooks/useThreadGroups';
 import { mapThreadData } from '../utils/mappers';
 
 const { TextArea } = AntInput;
@@ -56,7 +57,7 @@ interface SecondarySidebarProps {
   view: 'chat' | 'contacts';
   language: Language;
   friends: Teacher[];
-  groups: Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
+  groups?: Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
   friendRequests: FriendRequest[];
   threads?: Thread[];
   isLoadingThreads?: boolean;
@@ -74,7 +75,7 @@ export function SecondarySidebar({
   view,
   language,
   friends,
-  groups,
+  groups = [],
   friendRequests,
   threads = [],
   isLoadingThreads = false,
@@ -92,6 +93,23 @@ export function SecondarySidebar({
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
   const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
   const [showStrangerThreads, setShowStrangerThreads] = useState(false);
+
+  // Fetch thread groups here to keep the sidebar self-contained
+  const { data: threadGroupsData, isLoading: isLoadingThreadGroups } = useThreadGroups(view === 'chat' || view === 'contacts');
+  const mappedThreadGroups = useMemo(() => {
+    if (threadGroupsData?.success && Array.isArray(threadGroupsData.data)) {
+      return threadGroupsData.data.map((group: any) => ({
+        id: group._id || group.id || '',
+        name: group.name || 'Group',
+        memberCount: Array.isArray(group.members) ? group.members.length : 0,
+        avatar: group.avatar || '',
+        description: group.lastMessage?.content || '',
+      }));
+    }
+    return [] as Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
+  }, [threadGroupsData]);
+
+  const effectiveGroups = mappedThreadGroups.length > 0 ? mappedThreadGroups : groups;
   
   // Report modal states
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -644,13 +662,18 @@ export function SecondarySidebar({
         {/* Groups & Communities */}
         <div className="px-4 mb-4">
           <h3 className="text-sm text-gray-600 mb-2">{t.groupsList}</h3>
-          {groups.length === 0 ? (
+          {isLoadingThreadGroups && effectiveGroups.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-green-500" />
+              <p className="text-sm">{language === 'ja' ? '読み込み中...' : 'Đang tải nhóm...'}</p>
+            </div>
+          ) : effectiveGroups.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <p className="text-sm">{t.noGroups}</p>
             </div>
           ) : (
             <div className="space-y-1">
-              {groups.map((group) => (
+              {effectiveGroups.map((group) => (
                 <button
                   key={group.id}
                   onClick={() => onSelectGroup(group)}
