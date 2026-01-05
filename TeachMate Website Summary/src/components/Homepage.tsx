@@ -411,11 +411,15 @@ export function Homepage({
             />
           ) : (
             <>
-              <Row gutter={[16, 16]}>
+              <Row gutter={[16, 16]} align="stretch">
                 {filteredTeachers.map((teacher) => (
                   <Col xs={24} md={12} lg={8} key={teacher.id}>
-                    <Card className="border-2 hover:shadow-lg transition-shadow" hoverable>
-                      <Space direction="vertical" size="middle" className="w-full">
+                    <Card
+                      className="border-2 hover:shadow-lg transition-shadow h-full flex"
+                      hoverable
+                      bodyStyle={{ height: '100%' }}
+                    >
+                      <Space direction="vertical" size="middle" className="w-full h-full flex flex-col">
                         <Space size="middle" align="start">
                           <AntAvatar 
                             size={64} 
@@ -442,31 +446,31 @@ export function Homepage({
                           </Space>
                         </div>
 
-                        <Paragraph ellipsis={{ rows: 2 }} className="text-sm mb-0">
+                        <Paragraph ellipsis={{ rows: 2 }} className="text-sm mb-0 flex-1">
                           {teacher.bio}
                         </Paragraph>
 
-                        <Space.Compact block>
+                        <Space direction="vertical" size="small" className="w-full">
                           <AntButton 
+                            block
                             icon={<EyeOutlined />}
                             onClick={() => {
                               setSelectedProfileTeacher(teacher);
                               setProfileModalOpen(true);
                             }}
-                            style={{ width: '50%' }}
                           >
                             {t.viewProfile}
                           </AntButton>
                           <AntButton 
+                            block
                             type="primary"
                             icon={<UserAddOutlined />}
                             onClick={() => onSendFriendRequest(teacher)}
-                            style={{ width: '50%' }}
                             loading={false}
                           >
                             {t.sendFriendRequest}
                           </AntButton>
-                        </Space.Compact>
+                        </Space>
                       </Space>
                     </Card>
                   </Col>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, UserPlus, Users, Hash, Flag, Loader2 } from 'lucide-react';
 import { Button as AntButton, Modal, Input as AntInput, Select, message } from 'antd';
 import { Input } from './ui/input';
@@ -26,6 +27,22 @@ const getAvatarColor = (id: string) => {
   const index = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
   return colors[index];
 };
+
+const GroupIcon = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="64 64 896 896"
+    focusable="false"
+    aria-hidden="true"
+    className={className}
+    fill="currentColor"
+  >
+    <path d="M824.2 699.9a301.55 301.55 0 00-86.4-60.4C783.1 602.8 812 546.8 812 484c0-110.8-92.4-201.7-203.2-200-109.1 1.7-197 90.6-197 200 0 62.8 29 118.8 74.2 155.5a300.95 300.95 0 00-86.4 60.4C345 754.6 314 826.8 312 903.8a8 8 0 008 8.2h56c4.3 0 7.9-3.4 8-7.7 1.9-58 25.4-112.3 66.7-153.5A226.62 226.62 0 01612 684c60.9 0 118.2 23.7 161.3 66.8C814.5 792 838 846.3 840 904.3c.1 4.3 3.7 7.7 8 7.7h56a8 8 0 008-8.2c-2-77-33-149.2-87.8-203.9zM612 612c-34.2 0-66.4-13.3-90.5-37.5a126.86 126.86 0 01-37.5-91.8c.3-32.8 13.4-64.5 36.3-88 24-24.6 56.1-38.3 90.4-38.7 33.9-.3 66.8 12.9 91 36.6 24.8 24.3 38.4 56.8 38.4 91.4 0 34.2-13.3 66.3-37.5 90.5A127.3 127.3 0 01612 612zM361.5 510.4c-.9-8.7-1.4-17.5-1.4-26.4 0-15.9 1.5-31.4 4.3-46.5.7-3.6-1.2-7.3-4.5-8.8-13.6-6.1-26.1-14.5-36.9-25.1a127.54 127.54 0 01-38.7-95.4c.9-32.1 13.8-62.6 36.3-85.6 24.7-25.3 57.9-39.1 93.2-38.7 31.9.3 62.7 12.6 86 34.4 7.9 7.4 14.7 15.6 20.4 24.4 2 3.1 5.9 4.4 9.3 3.2 17.6-6.1 36.2-10.4 55.3-12.4 5.6-.6 8.8-6.6 6.3-11.6-32.5-64.3-98.9-108.7-175.7-109.9-110.9-1.7-203.3 89.2-203.3 199.9 0 62.8 28.9 118.8 74.2 155.5-31.8 14.7-61.1 35-86.5 60.4-54.8 54.7-85.8 126.9-87.8 204a8 8 0 008 8.2h56.1c4.3 0 7.9-3.4 8-7.7 1.9-58 25.4-112.3 66.7-153.5 29.4-29.4 65.4-49.8 104.7-59.7 3.9-1 6.5-4.7 6-8.7z" />
+  </svg>
+);
+
+const groupBlueGradient = { background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)' };
+const groupGreenGradient = { background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' };
+const groupMockAvatar = 'https://ui-avatars.com/api/?name=Group&background=3b82f6&color=ffffff&size=128';
 
 interface FriendRequest {
   id: string;
@@ -93,18 +110,31 @@ export function SecondarySidebar({
   const [messageFilter, setMessageFilter] = useState<'all' | 'unread' | 'categorized' | 'read'>('all');
   const [loadingRequests, setLoadingRequests] = useState<Set<string>>(new Set());
   const [showStrangerThreads, setShowStrangerThreads] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contactsTab = searchParams.get('tab') === 'groups' ? 'groups' : 'friends';
+
+  const handleContactsTabChange = (tab: 'friends' | 'groups') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+    setSearchQuery('');
+  };
 
   // Fetch thread groups here to keep the sidebar self-contained
   const { data: threadGroupsData, isLoading: isLoadingThreadGroups } = useThreadGroups(view === 'chat' || view === 'contacts');
   const mappedThreadGroups = useMemo(() => {
     if (threadGroupsData?.success && Array.isArray(threadGroupsData.data)) {
-      return threadGroupsData.data.map((group: any) => ({
-        id: group._id || group.id || '',
-        name: group.name || 'Group',
-        memberCount: Array.isArray(group.members) ? group.members.length : 0,
-        avatar: group.avatar || '',
-        description: group.lastMessage?.content || '',
-      }));
+      return threadGroupsData.data.map((group: any) => {
+        const rawAvatar = group.avatar || group.avatarUrl;
+        const avatar = typeof rawAvatar === 'string' && rawAvatar.trim() !== '' ? rawAvatar.trim() : '';
+        return {
+          id: group._id || group.id || '',
+          name: group.name || 'Group',
+          memberCount: Array.isArray(group.members) ? group.members.length : 0,
+          avatar,
+          description: group.lastMessage?.content || '',
+        };
+      });
     }
     return [] as Array<{ id: string; name: string; memberCount: number; avatar: string; description: string }>;
   }, [threadGroupsData]);
@@ -351,7 +381,11 @@ export function SecondarySidebar({
                 <p>{t.noConversations}</p>
               </div>
             ) : (
-              threadListToRender.map((thread) => (
+              threadListToRender.map((thread) => {
+                const isGroup = thread.type === 'group';
+                const rawAvatar = thread.avatar && thread.avatar.trim() !== '' ? thread.avatar : undefined;
+                const displayAvatar = isGroup ? rawAvatar || groupMockAvatar : rawAvatar;
+                return (
                 <div
                   key={thread.id}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 hover:shadow-sm transition-all border group ${
@@ -365,18 +399,25 @@ export function SecondarySidebar({
                     className="flex items-center gap-3 flex-1 min-w-0 text-left"
                   >
                     <div className="relative flex-shrink-0">
-                      <Avatar className="w-10 h-10 border-2 border-blue-100">
-                        {thread.avatar ? (
-                          <AvatarImage src={thread.avatar} alt={thread.name || ''} className="object-cover" />
-                        ) : null}
-                        <AvatarFallback className={`${thread.type === 'group' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
-                          {thread.type === 'group' ? (
-                            <Hash className="w-5 h-5 text-white" />
-                          ) : (
-                            thread.name?.charAt(0).toUpperCase() || '?'
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
+                      {displayAvatar ? (
+                        <Avatar className="w-10 h-10 border-2 border-blue-100">
+                          <AvatarImage src={displayAvatar} alt={thread.name || ''} className="object-cover" />
+                          <AvatarFallback className={`${isGroup ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
+                            {isGroup ? <GroupIcon className="w-5 h-5 text-white" /> : thread.name?.charAt(0).toUpperCase() || '?'}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : isGroup ? (
+                        <div
+                          className="w-10 h-10 rounded-full border-2 border-blue-100 flex items-center justify-center text-white font-semibold"
+                          style={groupBlueGradient}
+                        >
+                          <GroupIcon className="w-5 h-5 text-white" />
+                        </div>
+                      ) : (
+                        <div className={`w-10 h-10 rounded-full border-2 border-blue-100 flex items-center justify-center ${getAvatarColor(thread.id)} text-white font-semibold`}>
+                          {thread.name?.charAt(0).toUpperCase() || '?'}
+                        </div>
+                      )}
                       {thread.type === 'direct_friend' && (
                         <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
                       )}
@@ -446,7 +487,8 @@ export function SecondarySidebar({
                     </>
                   )}
                 </div>
-              ))
+              );
+              })
             )}
           </div>
         </ScrollArea>
@@ -522,250 +564,49 @@ export function SecondarySidebar({
 
   // Contacts View
   return (
-    <div className="w-96 bg-gradient-to-b from-green-50 to-white border-r-2 border-green-100 flex flex-col h-full shadow-sm">
-      {/* Search Bar and Action Buttons */}
-      <div className="p-4 border-b-2 border-green-100 flex-shrink-0 bg-white/80 backdrop-blur-sm">
-        <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-green-500" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t.searchFriends}
-              className="pl-9 border-green-200 focus:border-green-400 focus:ring-green-200"
-            />
-          </div>
+    <div className="w-72 bg-gradient-to-b from-green-50 to-white border-r-2 border-green-100 flex flex-col h-full shadow-sm">
+      <div className="p-4 border-b-2 border-green-100 bg-white/80 backdrop-blur-sm">
+        <h3 className="text-sm text-gray-600 mb-3">{language === 'ja' ? '連絡先' : 'Danh bạ'}</h3>
+        <div className="flex flex-col gap-2">
           <AntButton
-            onClick={onAddFriend}
-            type="default"
-            shape="circle"
-            title={t.addFriend}
-            className="!flex items-center justify-center w-9 h-9 !border-green-300 !text-green-600 hover:!bg-green-50 hover:!border-green-400"
+            block
+            type={contactsTab === 'friends' ? 'primary' : 'default'}
+            onClick={() => handleContactsTabChange('friends')}
+            className={contactsTab === 'friends' ? '!bg-green-600 hover:!bg-green-700' : '!text-green-700 !border-green-200 hover:!bg-green-50'}
           >
-            <UserPlus className="w-4 h-4" />
+            {language === 'ja' ? '友達リスト' : 'Danh sách bạn bè'}
           </AntButton>
           <AntButton
-            onClick={onCreateGroup}
-            type="default"
-            shape="circle"
-            title={t.createGroupChat}
-            className="!flex items-center justify-center w-9 h-9 !border-green-300 !text-green-600 hover:!bg-green-50 hover:!border-green-400"
+            block
+            type={contactsTab === 'groups' ? 'primary' : 'default'}
+            onClick={() => handleContactsTabChange('groups')}
+            className={contactsTab === 'groups' ? '!bg-green-600 hover:!bg-green-700' : '!text-green-700 !border-green-200 hover:!bg-green-50'}
           >
-            <Users className="w-4 h-4" />
+            {language === 'ja' ? 'グループ và cộng đồng' : 'Nhóm và cộng đồng'}
           </AntButton>
         </div>
       </div>
 
-      <ScrollArea className="flex-1 mt-4 overflow-hidden">
-        {/* Friend Requests */}
-        {friendRequests.length > 0 && (
-          <div className="px-4 mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm text-gray-600">{t.friendRequests}</h3>
-              <Badge variant="secondary">{friendRequests.length}</Badge>
-            </div>
-            <div className="space-y-2">
-              {friendRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="flex items-center gap-2 p-2 rounded-lg bg-green-50/70 border border-green-200 hover:border-green-300 transition-all"
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0 border border-green-200">
-                    {request.fromUser.avatar ? (
-                      <AvatarImage src={request.fromUser.avatar} alt={request.fromUser.name} className="object-cover" />
-                    ) : null}
-                    <AvatarFallback className={`${getAvatarColor(request.fromUser.id)} text-white font-semibold text-xs`}>
-                      {request.fromUser.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{request.fromUser.name}</p>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    <AntButton
-                      type="primary"
-                      size="small"
-                      onClick={() => handleAccept(request.id)}
-                      loading={loadingRequests.has(request.id)}
-                      disabled={loadingRequests.has(request.id)}
-                      className="flex items-center justify-center min-w-[28px] !h-7 !bg-green-600 !text-white hover:!bg-green-700"
-                    >
-                      ✓
-                    </AntButton>
-                    <AntButton
-                      size="small"
-                      onClick={() => handleReject(request.id)}
-                      loading={loadingRequests.has(request.id)}
-                      disabled={loadingRequests.has(request.id)}
-                      className="flex items-center justify-center min-w-[28px] !h-7 border-green-300 text-green-700 hover:!bg-green-50 hover:border-green-400"
-                    >
-                      ✕
-                    </AntButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Friend List */}
-        <div className="px-4 mb-4">
-          <h3 className="text-sm text-gray-600 mb-2">{t.friendList}</h3>
-          {filteredFriends.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p className="text-sm">{t.noFriends}</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {filteredFriends.map((friend) => (
-                <div
-                  key={friend.id}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-green-50 hover:shadow-sm transition-all border border-transparent hover:border-green-200 group"
-                >
-                  <button
-                    onClick={() => onSelectChat(friend)}
-                    className="flex items-center gap-3 flex-1 min-w-0"
-                  >
-                    <Avatar className="w-10 h-10 border-2 border-green-100 flex-shrink-0">
-                      {friend.avatar ? (
-                        <AvatarImage src={friend.avatar} alt={friend.name} className="object-cover" />
-                      ) : null}
-                      <AvatarFallback className={`${getAvatarColor(friend.id)} text-white font-semibold`}>
-                        {friend.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="font-semibold text-gray-800 truncate">{friend.name}</p>
-                      <p className="text-sm text-green-600 truncate">
-                        {friend.specialties[0]}
-                      </p>
-                    </div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full shadow-sm flex-shrink-0" />
-                  </button>
-                  <AntButton
-                    type="text"
-                    size="small"
-                    icon={<Flag className="w-4 h-4" />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenReportModal(friend);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity !text-red-500 hover:!bg-red-50"
-                    title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Groups & Communities */}
-        <div className="px-4 mb-4">
-          <h3 className="text-sm text-gray-600 mb-2">{t.groupsList}</h3>
-          {isLoadingThreadGroups && effectiveGroups.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-green-500" />
-              <p className="text-sm">{language === 'ja' ? '読み込み中...' : 'Đang tải nhóm...'}</p>
-            </div>
-          ) : effectiveGroups.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <p className="text-sm">{t.noGroups}</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {effectiveGroups.map((group) => (
-                <button
-                  key={group.id}
-                  onClick={() => onSelectGroup(group)}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-green-50 hover:shadow-sm transition-all border border-transparent hover:border-green-200"
-                >
-                  <Avatar className="w-10 h-10 border-2 border-green-100 flex-shrink-0">
-                    {group.avatar ? (
-                      <AvatarImage src={group.avatar} alt={group.name} className="object-cover" />
-                    ) : (
-                      <AvatarFallback className="bg-gradient-to-br from-green-400 to-green-600">
-                        <Hash className="w-5 h-5 text-white" />
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{group.name}</p>
-                    <p className="text-sm text-green-600">
-                      {group.memberCount} members
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* Report User Modal */}
-      <Modal
-        title={language === 'ja' ? 'ユーザーを報告' : 'Báo cáo người dùng'}
-        open={reportModalVisible}
-        onCancel={() => {
-          setReportModalVisible(false);
-          setReportingUser(null);
-          setReportReason('');
-        }}
-        footer={[
-          <AntButton
-            key="cancel"
-            onClick={() => {
-              setReportModalVisible(false);
-              setReportingUser(null);
-              setReportReason('');
-            }}
-            disabled={isSubmittingReport}
-          >
-            {language === 'ja' ? 'キャンセル' : 'Hủy'}
-          </AntButton>,
-          <AntButton
-            key="submit"
-            type="primary"
-            danger
-            onClick={handleSubmitReport}
-            loading={isSubmittingReport}
-          >
-            {language === 'ja' ? '報告する' : 'Gửi báo cáo'}
-          </AntButton>
-        ]}
-        centered
-      >
-        {reportingUser && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Avatar className="w-12 h-12">
-                {reportingUser.avatar ? (
-                  <AvatarImage src={reportingUser.avatar} alt={reportingUser.name} />
-                ) : null}
-                <AvatarFallback className={`${getAvatarColor(reportingUser.id)} text-white`}>
-                  {reportingUser.name.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-semibold">{reportingUser.name}</p>
-                <p className="text-sm text-gray-500">{reportingUser.specialties[0]}</p>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                {language === 'ja' ? '報告理由' : 'Lý do báo cáo'}
-              </label>
-              <TextArea
-                value={reportReason}
-                onChange={(e) => setReportReason(e.target.value)}
-                placeholder={language === 'ja' ? '理由を入力してください...' : 'Nhập lý do báo cáo...'}
-                rows={4}
-                maxLength={500}
-                showCount
-              />
-            </div>
-          </div>
-        )}
-      </Modal>
+      <div className="p-4 border-t border-green-100 bg-white/70 backdrop-blur-sm flex flex-col gap-2">
+        <AntButton
+          block
+          type="default"
+          onClick={onAddFriend}
+          className="!text-green-700 !border-green-200 hover:!bg-green-50"
+          icon={<UserPlus className="w-4 h-4" />}
+        >
+          {t.addFriend}
+        </AntButton>
+        <AntButton
+          block
+          type="default"
+          onClick={onCreateGroup}
+          className="!text-green-700 !border-green-200 hover:!bg-green-50"
+          icon={<Users className="w-4 h-4" />}
+        >
+          {t.createGroupChat}
+        </AntButton>
+      </div>
     </div>
   );
 }

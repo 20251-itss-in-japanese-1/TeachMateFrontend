@@ -90,25 +90,19 @@ export interface ScheduleResponse {
     data?: any;
 }
 
-/**
- * Create a schedule / event and post it to group chat
- */
+
 export async function createSchedule(request: CreateScheduleRequest) {
     const res = Http.post<ScheduleResponse>('/schedule', request);
     return res.then(r => r.data);
 }
 
-/**
- * Join a schedule (POST /schedule/:scheduleId/join)
- */
+
 export async function joinSchedule(scheduleId: string) {
     const res = Http.post<ScheduleResponse>(`/schedule/${scheduleId}/join`);
     return res.then(r => r.data);
 }
 
-/**
- * Leave a schedule (POST /schedule/:scheduleId/leave)
- */
+
 export async function leaveSchedule(scheduleId: string) {
     const res = Http.post<ScheduleResponse>(`/schedule/${scheduleId}/leave`);
     return res.then(r => r.data);

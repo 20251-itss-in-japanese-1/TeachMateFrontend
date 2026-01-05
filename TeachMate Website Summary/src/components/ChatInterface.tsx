@@ -52,7 +52,7 @@ import { reportUser } from '../apis/user.api';
 import { getThreads } from '../apis/thread.api';
 import { TeacherProfile } from './TeacherProfile';
 import { useThreadAttachments } from '../hooks/useThreadAttachments';
-import { getThreadSchedules, joinSchedule } from '../apis/schedule.api';
+import { getThreadSchedules, joinSchedule, createSchedule } from '../apis/schedule.api';
 import { Schedule } from '../types/schedule.type';
 
 const { Panel } = Collapse;
@@ -344,6 +344,7 @@ export function ChatInterface({
   const [appointmentTime, setAppointmentTime] = useState('12:00');
   const [appointmentTitle, setAppointmentTitle] = useState('');
   const [appointmentDescription, setAppointmentDescription] = useState('');
+  const [creatingSchedule, setCreatingSchedule] = useState(false);
   
   // Teacher profile modal
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -684,34 +685,63 @@ export function ChatInterface({
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleCreateAppointment = () => {
+  const handleCreateAppointment = async () => {
     if (!appointmentDate || !appointmentTitle.trim()) {
       toast.error(language === 'ja' ? '日時とタイトルを入力してください' : 'Vui lòng nhập ngày giờ và tiêu đề');
       return;
     }
+    const resolvedThreadId = threadDetail?.thread?._id || threadDetail?.thread?.id || threadId;
+    if (!resolvedThreadId) {
+      toast.error(language === 'ja' ? 'スレッドIDが必要です' : 'Cần có ID cuộc trò chuyện');
+      return;
+    }
 
-    const appointmentMessage: EnhancedMessage = {
-      id: Date.now().toString(),
-      senderId: currentTeacher.id,
-      receiverId: selectedTeacher.id,
-      content: `📅 ${language === 'ja' ? '予定' : 'Lịch hẹn'}: ${appointmentTitle}\n${appointmentDescription}`,
-      timestamp: new Date(),
-      type: 'text',
-      reactions: []
+    const timePart = appointmentTime || '00:00';
+    const dateIso = appointmentDate.format('YYYY-MM-DD');
+    const startAtIso = dayjs(`${dateIso}T${timePart}`).toISOString();
+    const userId = (currentTeacher as any)?.id || (currentTeacher as any)?._id;
+
+    const payload = {
+      title: appointmentTitle.trim(),
+      description: appointmentDescription.trim() || undefined,
+      date: dateIso,
+      time: appointmentTime,
+      startAt: startAtIso,
+      threadId: resolvedThreadId,
+      userId,
     };
 
-    setMessages([...messages, appointmentMessage]);
-    toast.success(
-      language === 'ja' 
-        ? `予定を設定しました: ${appointmentDate.format('YYYY/MM/DD')} ${appointmentTime}`
-        : `Đã đặt lịch hẹn: ${appointmentDate.format('DD/MM/YYYY')} ${appointmentTime}`
-    );
-    
-    setAppointmentModalVisible(false);
-    setAppointmentDate(null);
-    setAppointmentTime('12:00');
-    setAppointmentTitle('');
-    setAppointmentDescription('');
+    setCreatingSchedule(true);
+    try {
+      const res = await createSchedule(payload as any);
+      if (res?.success) {
+        toast.success(
+          language === 'ja'
+            ? `予定を設定しました: ${appointmentDate.format('YYYY/MM/DD')} ${appointmentTime}`
+            : `Đã đặt lịch hẹn: ${appointmentDate.format('DD/MM/YYYY')} ${appointmentTime}`
+        );
+
+        setAppointmentModalVisible(false);
+        setAppointmentDate(null);
+        setAppointmentTime('12:00');
+        setAppointmentTitle('');
+        setAppointmentDescription('');
+
+        if (onRefreshThread) {
+          try { await onRefreshThread(); } catch (e) { /* ignore */ }
+        }
+        if (onRefreshThreads) {
+          try { await onRefreshThreads(); } catch (e) { /* ignore */ }
+        }
+      } else {
+        toast.error(res?.message || (language === 'ja' ? '作成に失敗しました' : 'Tạo lịch thất bại'));
+      }
+    } catch (err: any) {
+      console.error('createSchedule failed', err);
+      toast.error(language === 'ja' ? `エラー: ${err?.message || err}` : `Lỗi: ${err?.message || err}`);
+    } finally {
+      setCreatingSchedule(false);
+    }
   };
 
   return (
@@ -1109,7 +1139,7 @@ export function ChatInterface({
               }}
               style={{ flex: 1 }}
               disabled={isSending}
-              className="h-12 border-0 focus:ring-0 text-[15px] px-4"
+              className="!h-12 border-0 focus:ring-0 text-[15px] px-4"
             />
             
             <AntButton 
@@ -1176,6 +1206,7 @@ export function ChatInterface({
           setAppointmentDescription('');
         }}
         onOk={handleCreateAppointment}
+        confirmLoading={creatingSchedule}
         okText={language === 'ja' ? '設定' : 'Đặt lịch'}
         cancelText={language === 'ja' ? 'キャンセル' : 'Hủy'}
         width={520}
