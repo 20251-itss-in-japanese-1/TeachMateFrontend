@@ -61,3 +61,7 @@ export async function getThreadAttachments(threadId: string) {
     return res.then(response => response.data);
 }
 
+export async function leaveThreadGroup(threadId: string) {
+    const res = Http.post(`/thread/${threadId}/out`);
+    return res.then(response => response.data);
+}
