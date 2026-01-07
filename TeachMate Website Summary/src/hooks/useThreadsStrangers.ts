@@ -14,7 +14,6 @@ export const useThreadsStrangers = (enabled: boolean = false): UseQueryResult<Th
     refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchInterval: enabled ? 5000 : false,
-    keepPreviousData: true,
     refetchIntervalInBackground: true,
     queryFn: async () => {
       const response = await getThreadsStrangers();

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, UserPlus, Users, Hash, Flag, Loader2 } from 'lucide-react';
-import { Button as AntButton, Modal, Input as AntInput, Select, message } from 'antd';
+import { Button as AntButton, Modal, Input as AntInput, Select, message, Tag as AntTag } from 'antd';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -448,9 +448,16 @@ export function SecondarySidebar({
 
                     <div className="flex-1 text-left min-w-0">
                       <div className="flex items-center justify-between mb-1">
-                        <p className={`font-semibold text-gray-800 truncate ${thread.unreadCount > 0 ? 'text-blue-700' : ''}`}>
-                          {thread.name}
-                        </p>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <p className={`font-semibold text-gray-800 truncate ${thread.unreadCount > 0 ? 'text-blue-700' : ''}`}>
+                            {thread.name}
+                          </p>
+                          {thread.type === 'direct_stranger' && (
+                            <AntTag color="orange" className="text-xs px-2 py-0 flex-shrink-0">
+                              {language === 'ja' ? '知らない人' : 'Người lạ'}
+                            </AntTag>
+                          )}
+                        </div>
                         {thread.unreadCount > 0 && (
                           <AntBadge 
                             count={thread.unreadCount} 
