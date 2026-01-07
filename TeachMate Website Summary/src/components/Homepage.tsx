@@ -415,12 +415,12 @@ export function Homepage({
                 {filteredTeachers.map((teacher) => (
                   <Col xs={24} md={12} lg={8} key={teacher.id}>
                     <Card
-                      className="border-2 hover:shadow-lg transition-shadow h-full flex"
+                      className="border-2 hover:shadow-lg transition-shadow h-full"
                       hoverable
-                      bodyStyle={{ height: '100%' }}
+                      bodyStyle={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '420px' }}
                     >
-                      <Space direction="vertical" size="middle" className="w-full h-full flex flex-col">
-                        <Space size="middle" align="start">
+                      <div className="flex flex-col h-full">
+                        <Space size="middle" align="start" className="mb-4">
                           <AntAvatar 
                             size={64} 
                             src={teacher.avatar}
@@ -430,27 +430,34 @@ export function Homepage({
                           </AntAvatar>
                           <div className="flex-1 min-w-0">
                             <Title level={5} ellipsis className="mb-1">{teacher.name}</Title>
-                            <Tag color="blue">{teacher.nationality}</Tag>
+                            <Tag color="blue" className="mb-1">{teacher.nationality}</Tag>
                             <Text className="text-sm text-gray-600 block">
                               {teacher.experience} {t.yearsExperience}
                             </Text>
                           </div>
                         </Space>
 
-                        <div>
+                        <div className="mb-3">
                           <Text type="secondary" className="text-sm block mb-2">{t.specialties}:</Text>
-                          <Space wrap>
-                            {teacher.specialties.slice(0, 3).map((specialty, idx) => (
-                              <Tag key={idx}>{specialty}</Tag>
-                            ))}
-                          </Space>
+                          <div style={{ minHeight: '60px' }}>
+                            <Space wrap>
+                              {teacher.specialties.slice(0, 3).map((specialty, idx) => (
+                                <Tag key={idx}>{specialty}</Tag>
+                              ))}
+                              {teacher.specialties.length > 3 && (
+                                <Tag>+{teacher.specialties.length - 3}</Tag>
+                              )}
+                            </Space>
+                          </div>
                         </div>
 
-                        <Paragraph ellipsis={{ rows: 2 }} className="text-sm mb-0 flex-1">
-                          {teacher.bio}
-                        </Paragraph>
+                        <div className="flex-1 mb-4" style={{ minHeight: '60px' }}>
+                          <Paragraph ellipsis={{ rows: 3 }} className="text-sm mb-0">
+                            {teacher.bio || (language === 'ja' ? '自己紹介なし' : 'Chưa có giới thiệu')}
+                          </Paragraph>
+                        </div>
 
-                        <Space direction="vertical" size="small" className="w-full">
+                        <Space direction="vertical" size="small" className="w-full mt-auto">
                           <AntButton 
                             block
                             icon={<EyeOutlined />}
@@ -471,7 +478,7 @@ export function Homepage({
                             {t.sendFriendRequest}
                           </AntButton>
                         </Space>
-                      </Space>
+                      </div>
                     </Card>
                   </Col>
                 ))}

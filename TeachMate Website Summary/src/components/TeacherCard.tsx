@@ -34,9 +34,9 @@ export function TeacherCard({ teacher, onViewProfile, onStartChat, language }: T
   const t = translations[language];
   
   return (
-    <Card className="hover:shadow-md transition-all border-2" hoverable>
-      <Space direction="vertical" size="middle" className="w-full">
-        <Space size="middle" align="start">
+    <Card className="hover:shadow-md transition-all border-2 h-full" hoverable>
+      <div className="flex flex-col h-full" style={{ minHeight: '380px' }}>
+        <Space size="middle" align="start" className="mb-4">
           <AntAvatar 
             size={80} 
             src={teacher.avatar}
@@ -46,36 +46,42 @@ export function TeacherCard({ teacher, onViewProfile, onStartChat, language }: T
           </AntAvatar>
           
           <div className="flex-1 min-w-0">
-            <Space wrap className="mb-2">
-              <Title level={5} ellipsis className="mb-0">{teacher.name}</Title>
-              <Tag color={teacher.nationality === 'Japanese' ? 'blue' : 'green'}>
-                {teacher.nationality === 'Japanese' ? t.japanese : t.vietnamese}
-              </Tag>
-            </Space>
+            <Title level={5} ellipsis className="mb-2">{teacher.name}</Title>
             
-            <Text type="secondary" className="block mb-3">
+            <Tag color={teacher.nationality === 'Japanese' ? 'blue' : 'green'} className="mb-2">
+              {teacher.nationality === 'Japanese' ? t.japanese : t.vietnamese}
+            </Tag>
+            
+            <Text type="secondary" className="block">
               {teacher.experience} {t.yearsExperience}
             </Text>
           </div>
         </Space>
         
         {/* Specialties - Vertical Layout */}
-        <div>
+        <div className="mb-3">
           <Text type="secondary" className="text-sm block mb-2">{t.specialties}:</Text>
-          <Space wrap>
-            {teacher.specialties.map((specialty) => (
-              <Tag key={specialty} color="blue">
-                {specialty}
-              </Tag>
-            ))}
-          </Space>
+          <div className="min-h-[60px]">
+            <Space wrap>
+              {teacher.specialties.slice(0, 3).map((specialty) => (
+                <Tag key={specialty} color="blue">
+                  {specialty}
+                </Tag>
+              ))}
+              {teacher.specialties.length > 3 && (
+                <Tag color="default">+{teacher.specialties.length - 3}</Tag>
+              )}
+            </Space>
+          </div>
         </div>
         
-        <Text className="text-gray-700" ellipsis={{ rows: 2 }}>
-          {teacher.bio}
-        </Text>
+        <div className="flex-1 mb-4">
+          <Text className="text-gray-700 line-clamp-3 block">
+            {teacher.bio || (language === 'ja' ? '自己紹介なし' : 'Chưa có giới thiệu')}
+          </Text>
+        </div>
         
-        <Space.Compact block>
+        <Space.Compact block className="mt-auto">
           <AntButton 
             icon={<UserOutlined />}
             onClick={() => onViewProfile(teacher)}
@@ -92,7 +98,7 @@ export function TeacherCard({ teacher, onViewProfile, onStartChat, language }: T
             {t.chat}
           </AntButton>
         </Space.Compact>
-      </Space>
+      </div>
     </Card>
   );
 }
