@@ -156,21 +156,19 @@ export function PrimaryNavbar({
       />
 
       {/* Notification Bell */}
-      <AntButton
-        type={activeView === 'notifications' ? 'primary' : 'text'}
-        shape="circle"
-        size="large"
-        onClick={onViewNotifications}
-        className={`w-12 h-12 mb-3 relative ${activeView === 'notifications'
-          ? 'bg-purple-600 hover:bg-purple-700 text-white'
-          : 'text-purple-300 hover:bg-purple-800 hover:text-white'
-          }`}
-        icon={<BellOutlined />}
-      >
-        {unreadNotificationsCount > 0 && (
-          <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-indigo-900" />
-        )}
-      </AntButton>
+      <AntBadge count={unreadNotificationsCount} offset={[-5, 5]} size="small">
+        <AntButton
+          type={activeView === 'notifications' ? 'primary' : 'text'}
+          shape="circle"
+          size="large"
+          onClick={onViewNotifications}
+          className={`w-12 h-12 mb-3 ${activeView === 'notifications'
+            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+            : 'text-purple-300 hover:bg-purple-800 hover:text-white'
+            }`}
+          icon={<BellOutlined />}
+        />
+      </AntBadge>
 
       {/* Spacer */}
       <div className="flex-1" />

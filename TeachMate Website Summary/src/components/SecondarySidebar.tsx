@@ -208,7 +208,7 @@ export function SecondarySidebar({
     friend.specialties.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Split threads: keep direct_stranger threads (from getThreads) where last sender is not the current user in the stranger bucket
+  
   const { primaryThreads, strangerThreadsFromFeed } = useMemo(() => {
     const stranger: Thread[] = [];
     const primary: Thread[] = [];
@@ -228,15 +228,25 @@ export function SecondarySidebar({
   }, [threads, currentUserId]);
 
   const filteredThreads = primaryThreads.filter(thread => {
-    const name = thread.name || '';
-    const lastMessageContent = thread.lastMessage?.content || '';
-    return searchQuery === '' ||
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lastMessageContent.toLowerCase().includes(searchQuery.toLowerCase());
+    // Lọc theo search query
+    const matchesSearch = searchQuery === '' ||
+      (thread.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (thread.lastMessage?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    // Lọc theo message filter
+    if (messageFilter === 'unread') {
+      return thread.unreadCount > 0;
+    } else if (messageFilter === 'read') {
+      return thread.unreadCount === 0;
+    }
+    // 'all' - hiển thị tất cả
+    return true;
   });
 
-  // Stranger threads (polled & cached)
-  const { data: strangerThreadsData, refetch: refetchStrangerThreads, isFetching: isFetchingStrangers, isLoading: isLoadingStrangers } = useThreadsStrangers(showStrangerThreads);
+  // Stranger threads (polled & cached) - always enabled để badge cập nhật real-time
+  const { data: strangerThreadsData, refetch: refetchStrangerThreads, isFetching: isFetchingStrangers, isLoading: isLoadingStrangers } = useThreadsStrangers(true);
   const strangerThreads = useMemo(() => {
     if (strangerThreadsData?.success) {
       return mapThreadData(strangerThreadsData.data, currentUserId) || [];
@@ -257,11 +267,21 @@ export function SecondarySidebar({
   const showStrangerFetching = showStrangerThreads && isFetchingStrangers && strangerThreads.length > 0;
 
   const filteredStrangerThreads = mergedStrangerThreads.filter(thread => {
-    const name = thread.name || '';
-    const lastMessageContent = thread.lastMessage?.content || '';
-    return searchQuery === '' ||
-      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lastMessageContent.toLowerCase().includes(searchQuery.toLowerCase());
+    // Lọc theo search query
+    const matchesSearch = searchQuery === '' ||
+      (thread.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (thread.lastMessage?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    // Lọc theo message filter
+    if (messageFilter === 'unread') {
+      return thread.unreadCount > 0;
+    } else if (messageFilter === 'read') {
+      return thread.unreadCount === 0;
+    }
+    // 'all' - hiển thị tất cả
+    return true;
   });
 
   const threadListToRender = showStrangerThreads ? filteredStrangerThreads : filteredThreads;
@@ -339,20 +359,31 @@ export function SecondarySidebar({
             >
               {t.unreadMessages}
             </AntButton>
-            <AntButton
-              type={showStrangerThreads ? 'primary' : 'default'}
-              size="middle"
-              onClick={() => {
-                setShowStrangerThreads(true);
-                refetchStrangerThreads();
+            <AntBadge 
+              dot={mergedStrangerThreads.some(t => t.unreadCount > 0)}
+              color="red"
+              offset={[-5, 5]}
+              style={{
+                width: '12px',
+                height: '12px'
               }}
-              className={`flex-1 min-w-[150px] ${showStrangerThreads ? '!bg-indigo-600 hover:!bg-indigo-700' : '!text-indigo-600 !border-indigo-200 hover:!bg-indigo-50 hover:!border-indigo-300'}`}
+              className="[&_.ant-badge-dot]:w-3 [&_.ant-badge-dot]:h-3"
             >
-              <span className="flex items-center justify-center gap-2">
-                {t.strangerMessages}
-                {showStrangerFetching && <Loader2 className="w-4 h-4 animate-spin" />}
-              </span>
-            </AntButton>
+              <AntButton
+                type={showStrangerThreads ? 'primary' : 'default'}
+                size="middle"
+                onClick={() => {
+                  setShowStrangerThreads(true);
+                  refetchStrangerThreads();
+                }}
+                className={`flex-1 min-w-[150px] ${showStrangerThreads ? '!bg-indigo-600 hover:!bg-indigo-700' : '!text-indigo-600 !border-indigo-200 hover:!bg-indigo-50 hover:!border-indigo-300'}`}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  {t.strangerMessages}
+                  {showStrangerFetching && <Loader2 className="w-4 h-4 animate-spin" />}
+                </span>
+              </AntButton>
+            </AntBadge>
           </div>
           {showStrangerThreads && (
             <div className="mt-2 flex justify-end">
