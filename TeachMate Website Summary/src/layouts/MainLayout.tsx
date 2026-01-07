@@ -276,6 +276,7 @@ export const MainLayout: React.FC = () => {
         onLogout={handleLogout}
         onViewNotifications={() => navigate('/notifications')}
         unreadNotificationsCount={unreadNotificationsCount}
+        threads={threads}
         language={language}
       />
 
