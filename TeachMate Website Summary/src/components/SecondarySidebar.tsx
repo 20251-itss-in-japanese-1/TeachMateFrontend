@@ -228,20 +228,16 @@ export function SecondarySidebar({
   }, [threads, currentUserId]);
 
   const filteredThreads = primaryThreads.filter(thread => {
-    // Lọc theo search query
     const matchesSearch = searchQuery === '' ||
       (thread.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (thread.lastMessage?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     if (!matchesSearch) return false;
-
-    // Lọc theo message filter
     if (messageFilter === 'unread') {
       return thread.unreadCount > 0;
     } else if (messageFilter === 'read') {
       return thread.unreadCount === 0;
     }
-    // 'all' - hiển thị tất cả
     return true;
   });
 
@@ -267,20 +263,16 @@ export function SecondarySidebar({
   const showStrangerFetching = showStrangerThreads && isFetchingStrangers && strangerThreads.length > 0;
 
   const filteredStrangerThreads = mergedStrangerThreads.filter(thread => {
-    // Lọc theo search query
     const matchesSearch = searchQuery === '' ||
       (thread.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (thread.lastMessage?.content || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     if (!matchesSearch) return false;
-
-    // Lọc theo message filter
     if (messageFilter === 'unread') {
       return thread.unreadCount > 0;
     } else if (messageFilter === 'read') {
       return thread.unreadCount === 0;
     }
-    // 'all' - hiển thị tất cả
     return true;
   });
 
