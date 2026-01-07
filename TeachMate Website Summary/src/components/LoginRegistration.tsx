@@ -105,7 +105,8 @@ export function LoginRegistration({ onLogin, onAdminLogin, language }: LoginRegi
     if (provider === 'google') {
       // Redirect to backend Google OAuth endpoint
       // Backend will redirect back to https://teach-mate-frontend.vercel.app/?token=${token}
-      window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/google';
+      // window.location.href = 'https://d8f661c2-51ad-4607-97c0-4d89ac3a1f1c.us-east-1.cloud.genez.io/api/v1/auth/google';
+      window.location.href = 'http://localhost:3000/api/v1/auth/google';
     }
   };
 
