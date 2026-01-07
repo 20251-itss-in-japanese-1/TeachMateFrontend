@@ -336,6 +336,12 @@ export function ChatInterface({
   const [nickname, setNickname] = useState(selectedTeacher.name);
   const [editingNickname, setEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState(selectedTeacher.name);
+
+  // Update nickname when selectedTeacher changes
+  React.useEffect(() => {
+    setNickname(selectedTeacher.name);
+    setTempNickname(selectedTeacher.name);
+  }, [selectedTeacher.id, selectedTeacher.name]);
   
   // Upload & Appointment Modals
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
