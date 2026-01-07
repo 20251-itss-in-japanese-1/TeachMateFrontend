@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Button as AntButton,
   Avatar as AntAvatar,
+  Badge as AntBadge,
   Dropdown,
   Space,
   Typography
@@ -21,6 +22,11 @@ import { Teacher, Notification } from '../types';
 
 const { Text } = Typography;
 
+interface Thread {
+  id: string;
+  unreadCount: number;
+}
+
 interface PrimaryNavbarProps {
   user: Teacher;
   activeView: 'home' | 'chat' | 'contacts' | 'all-teachers' | 'all-groups' | 'notifications' | 'admin';
@@ -30,6 +36,7 @@ interface PrimaryNavbarProps {
   onLogout: () => void;
   onViewNotifications: () => void;
   unreadNotificationsCount: number;
+  threads?: Thread[];
   language: Language;
 }
 
@@ -49,9 +56,13 @@ export function PrimaryNavbar({
   onLogout,
   onViewNotifications,
   unreadNotificationsCount,
+  threads = [],
   language
 }: PrimaryNavbarProps) {
   const t = translations[language];
+  
+  // Tính tổng số tin nhắn chưa đọc
+  const totalUnreadMessages = threads.reduce((sum, thread) => sum + (thread.unreadCount || 0), 0);
 
   const menuItems = [
     {
@@ -117,17 +128,19 @@ export function PrimaryNavbar({
       />
 
       {/* Chat Icon */}
-      <AntButton
-        type={activeView === 'chat' ? 'primary' : 'text'}
-        shape="circle"
-        size="large"
-        onClick={() => onViewChange('chat')}
-        className={`w-12 h-12 mb-3 ${activeView === 'chat'
-          ? 'bg-purple-600 hover:bg-purple-700 text-white'
-          : 'text-purple-300 hover:bg-purple-800 hover:text-white'
-          }`}
-        icon={<MessageOutlined />}
-      />
+      <AntBadge count={totalUnreadMessages} offset={[-5, 5]} size="small">
+        <AntButton
+          type={activeView === 'chat' ? 'primary' : 'text'}
+          shape="circle"
+          size="large"
+          onClick={() => onViewChange('chat')}
+          className={`w-12 h-12 mb-3 ${activeView === 'chat'
+            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+            : 'text-purple-300 hover:bg-purple-800 hover:text-white'
+            }`}
+          icon={<MessageOutlined />}
+        />
+      </AntBadge>
 
       {/* Contacts Icon */}
       <AntButton

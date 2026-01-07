@@ -582,7 +582,7 @@ export function SecondarySidebar({
             onClick={() => handleContactsTabChange('groups')}
             className={contactsTab === 'groups' ? '!bg-green-600 hover:!bg-green-700' : '!text-green-700 !border-green-200 hover:!bg-green-50'}
           >
-            {language === 'ja' ? 'グループ và cộng đồng' : 'Nhóm và cộng đồng'}
+            {language === 'ja' ? 'グループとコミュニティ' : 'Nhóm và cộng đồng'}
           </AntButton>
         </div>
       </div>
