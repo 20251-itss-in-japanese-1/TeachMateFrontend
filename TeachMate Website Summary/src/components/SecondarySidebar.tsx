@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, UserPlus, Users, Hash, Flag, Loader2 } from 'lucide-react';
-import { Button as AntButton, Modal, Input as AntInput, Select, message } from 'antd';
+import { Button as AntButton, Modal, Input as AntInput, Select, message, Avatar as AntAvatar } from 'antd';
+import { TeamOutlined } from '@ant-design/icons';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
@@ -422,24 +423,20 @@ export function SecondarySidebar({
                     className="flex items-center gap-3 flex-1 min-w-0 text-left"
                   >
                     <div className="relative flex-shrink-0">
-                      {displayAvatar ? (
-                        <Avatar className="w-10 h-10 border-2 border-blue-100">
-                          <AvatarImage src={displayAvatar} alt={thread.name || ''} className="object-cover" />
-                          <AvatarFallback className={`${isGroup ? 'bg-gradient-to-br from-blue-400 to-blue-600' : getAvatarColor(thread.id)} text-white font-semibold`}>
-                            {isGroup ? <GroupIcon className="w-5 h-5 text-white" /> : thread.name?.charAt(0).toUpperCase() || '?'}
-                          </AvatarFallback>
-                        </Avatar>
-                      ) : isGroup ? (
-                        <div
-                          className="w-10 h-10 rounded-full border-2 border-blue-100 flex items-center justify-center text-white font-semibold"
-                          style={groupBlueGradient}
-                        >
-                          <GroupIcon className="w-5 h-5 text-white" />
-                        </div>
+                      {isGroup ? (
+                        <AntAvatar
+                          size={40}
+                          icon={<TeamOutlined />}
+                          style={{ backgroundColor: '#1890ff' }}
+                        />
                       ) : (
-                        <div className={`w-10 h-10 rounded-full border-2 border-blue-100 flex items-center justify-center ${getAvatarColor(thread.id)} text-white font-semibold`}>
+                        <AntAvatar
+                          size={40}
+                          src={displayAvatar}
+                          style={{ backgroundColor: getAvatarColor(thread.id).replace('bg-', '#').split('-')[0] || '#1890ff' }}
+                        >
                           {thread.name?.charAt(0).toUpperCase() || '?'}
-                        </div>
+                        </AntAvatar>
                       )}
                       {thread.type === 'direct_friend' && (
                         <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
