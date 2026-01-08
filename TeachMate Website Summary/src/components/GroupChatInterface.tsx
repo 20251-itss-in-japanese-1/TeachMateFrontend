@@ -1003,7 +1003,6 @@ export function GroupChatInterface({
           <div className="flex items-center gap-3">
             <AntAvatar
               size={48}
-              src={selectedGroup.avatar}
               icon={<TeamOutlined />}
               style={{ backgroundColor: '#1890ff' }}
             />
