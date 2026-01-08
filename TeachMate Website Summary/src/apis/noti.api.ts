@@ -10,7 +10,18 @@ export async function markNotiAsRead(notiId: string) {
     const res = Http.post<BaseResponse>(`/noti/read`, { notiId });
     return res.then(response => response.data);
 }
+
 export async function markAllNotiAsRead() {
     const res = Http.post<BaseResponse>('/noti/read-all');
+    return res.then(response => response.data);
+}
+
+export async function deleteNoti(notiId: string) {
+    const res = Http.post<BaseResponse>(`/noti/delete`, { notiId });
+    return res.then(response => response.data);
+}
+
+export async function deleteAllNoti() {
+    const res = Http.post<BaseResponse>('/noti/delete-all');
     return res.then(response => response.data);
 }

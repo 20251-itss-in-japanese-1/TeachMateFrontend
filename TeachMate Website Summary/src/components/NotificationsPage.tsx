@@ -23,7 +23,7 @@ import {
   DeleteOutlined,
   LeftOutlined
 } from '@ant-design/icons';
-import { markNotiAsRead, markAllNotiAsRead } from '../apis/noti.api';
+import { markNotiAsRead, markAllNotiAsRead, deleteNoti } from '../apis/noti.api';
 import { toast } from 'sonner';
 import { useNotifications } from '../hooks/useNoti';
 
@@ -104,15 +104,27 @@ export function NotificationsPage({
     }
   };
 
-  const handleDeleteNotification = (notificationId: string) => {
-    // Note: You might want to add an API call here to delete from server
-    toast.success(
-      language === 'ja' 
-        ? '通知を削除しました' 
-        : 'Đã xóa thông báo'
-    );
-    // Refetch to sync with server
-    refetch();
+  const handleDeleteNotification = async (notificationId: string) => {
+    try {
+      const response = await deleteNoti(notificationId);
+      
+      if (response.success) {
+        // Refetch to sync with server
+        refetch();
+        toast.success(
+          language === 'ja' 
+            ? '通知を削除しました' 
+            : 'Đã xóa thông báo'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      toast.error(
+        language === 'ja' 
+          ? '削除に失敗しました' 
+          : 'Không thể xóa thông báo'
+      );
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
