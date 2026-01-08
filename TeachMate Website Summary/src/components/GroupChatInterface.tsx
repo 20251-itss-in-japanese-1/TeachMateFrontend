@@ -539,14 +539,27 @@ export function GroupChatInterface({
         const res = await getThreadSchedules(threadId);
         if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
           // Map backend schedule shape to GroupEvent if necessary
-          const mappedEvents = res.data.map((s: any) => ({
-            id: s._id || s.id,
-            title: s.title,
-            date: s.startAt ? new Date(s.startAt) : (s.date ? new Date(s.date) : new Date()),
-            time: s.time || (s.startAt ? new Date(s.startAt).toISOString().substr(11,5) : '00:00'),
-            description: s.description || '',
-            participants: s.participants || s.attendees || []
-          }));
+          const mappedEvents = res.data.map((s: any) => {
+            const normalizeId = (p: any) =>
+              typeof p === 'string'
+                ? p
+                : p?._id || p?.id || p?.userId?._id || p?.userId?.id || p;
+
+            const participants = Array.isArray(s.participants)
+              ? s.participants.map((p: any) => normalizeId(p)).filter(Boolean)
+              : Array.isArray(s.attendees)
+                ? s.attendees.map((p: any) => normalizeId(p)).filter(Boolean)
+                : [];
+
+            return {
+              id: s._id || s.id,
+              title: s.title,
+              date: s.startAt ? new Date(s.startAt) : (s.date ? new Date(s.date) : new Date()),
+              time: s.time || (s.startAt ? new Date(s.startAt).toISOString().substr(11,5) : '00:00'),
+              description: s.description || '',
+              participants
+            };
+          });
           setGroupEvents(mappedEvents);
         } else {
           setGroupEvents(fallbackEvents);
@@ -910,13 +923,14 @@ export function GroupChatInterface({
   const handleJoinEvent = async (eventId: string) => {
     const userId = (currentUser as any).id || (currentUser as any)._id;
     try {
-      // Optimistic local update
+      // Optimistic local update (only if not already joined)
       setGroupEvents(prev =>
-        prev.map(ev =>
-          ev.id === eventId
-            ? { ...ev, participants: Array.isArray(ev.participants) ? [...ev.participants, userId] : [userId] }
-            : ev
-        )
+        prev.map(ev => {
+          if (ev.id !== eventId) return ev;
+          const hasJoined = Array.isArray(ev.participants) && ev.participants.includes(userId);
+          if (hasJoined) return ev;
+          return { ...ev, participants: Array.isArray(ev.participants) ? [...ev.participants, userId] : [userId] };
+        })
       );
 
       // Attempt backend call but don't fail hard if API shape differs
