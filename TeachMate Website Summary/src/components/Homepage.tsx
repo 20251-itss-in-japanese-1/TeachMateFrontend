@@ -29,7 +29,8 @@ import {
   ClockCircleOutlined,
   EyeOutlined
 } from '@ant-design/icons';
-import { friendSuggest } from '../apis/friend.api';
+import { friendSuggest, FriendSuggestParams } from '../apis/friend.api';
+import { FriendSuggestion } from '../types/friend.type';
 import { searchTeacher } from '../apis/user.api';
 import { mapUserToTeacher } from '../utils/mappers';
 import { TeacherProfile } from './TeacherProfile';
@@ -53,6 +54,21 @@ interface HomepageProps {
   onViewNotifications?: () => void;
   onViewAllTeachers?: () => void;
   onViewAllGroups?: () => void;
+  friendSuggestions?: FriendSuggestion;
+  isLoadingSuggestions?: boolean;
+  onClearFilters?: () => void;
+  onFilterChange?: {
+    setTeacherName: (value: string) => void;
+    setNationality: (value: string) => void;
+    setExperience: (value: string) => void;
+    setSubjects: (value: string) => void;
+  };
+  filters?: {
+    teacherName: string;
+    nationality: string;
+    experience: string;
+    subjects: string;
+  };
 }
 
 // Generate avatar colors
@@ -106,7 +122,7 @@ export function Homepage({
     const fetchFriendSuggestions = async () => {
       setIsLoadingTeachers(true);
       try {
-        const response = await friendSuggest(teacherPage, itemsPerPage);
+        const response = await friendSuggest({ page: teacherPage, limit: itemsPerPage });
         
         if (response.success) {
           const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
@@ -132,7 +148,7 @@ export function Homepage({
     let active = true;
     const poll = async () => {
       try {
-        const response = await friendSuggest(teacherPage, itemsPerPage);
+        const response = await friendSuggest({ page: teacherPage, limit: itemsPerPage });
         if (active && response.success) {
           const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
           setSuggestedTeachers(mappedTeachers);
@@ -152,11 +168,26 @@ export function Homepage({
 
   // Search teachers from API with debounce
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      return; // Skip search if query is empty
-    }
-
     const timeoutId = setTimeout(async () => {
+      if (!searchQuery.trim()) {
+        // When search is cleared, fetch friend suggestions again
+        setIsLoadingTeachers(true);
+        try {
+          const response = await friendSuggest({ page: 1, limit: itemsPerPage });
+          if (response.success) {
+            const mappedTeachers = response.data.map(user => mapUserToTeacher(user));
+            setSuggestedTeachers(mappedTeachers);
+            setTotalTeachers(response.meta.total);
+            setTeacherPage(1);
+          }
+        } catch (error) {
+          console.error('Failed to fetch friend suggestions:', error);
+        } finally {
+          setIsLoadingTeachers(false);
+        }
+        return;
+      }
+
       setIsLoadingTeachers(true);
       try {
         const response = await searchTeacher(searchQuery);
@@ -174,7 +205,7 @@ export function Homepage({
     }, 500); // Debounce 500ms
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  }, [searchQuery, itemsPerPage]);
 
   // Get all unique specialties for filter
   const allSpecialties = useMemo(() => {
@@ -208,12 +239,8 @@ export function Homepage({
   }, [suggestedTeachers, searchQuery, selectedSpecialty, selectedNationality, experienceRange]);
 
   const filteredGroups = useMemo(() => {
-    return groups.filter(group => 
-      searchQuery === '' || 
-      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      group.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [groups, searchQuery]);
+    return groups;
+  }, [groups]);
 
   // Paginated teachers
   const paginatedTeachers = useMemo(() => {
@@ -468,15 +495,25 @@ export function Homepage({
                           >
                             {t.viewProfile}
                           </AntButton>
-                          <AntButton 
-                            block
-                            type="primary"
-                            icon={<UserAddOutlined />}
-                            onClick={() => onSendFriendRequest(teacher)}
-                            loading={false}
-                          >
-                            {t.sendFriendRequest}
-                          </AntButton>
+                          {teacher.sendFriend ? (
+                            <AntButton 
+                              block
+                              disabled
+                              icon={<UserAddOutlined />}
+                            >
+                              {language === 'ja' ? '友達リクエスト送信済み' : 'Đã gửi lời mời kết bạn'}
+                            </AntButton>
+                          ) : (
+                            <AntButton 
+                              block
+                              type="primary"
+                              icon={<UserAddOutlined />}
+                              onClick={() => onSendFriendRequest(teacher)}
+                              loading={false}
+                            >
+                              {t.sendFriendRequest}
+                            </AntButton>
+                          )}
                         </Space>
                       </div>
                     </Card>

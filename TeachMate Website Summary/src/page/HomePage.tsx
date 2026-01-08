@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { Homepage } from '../components/Homepage';
 import { mockSessions } from '../data/mockData';
@@ -11,6 +11,7 @@ import { mapFriendListData, mapFriendRequestData } from '../utils/mappers';
 import { Schedule } from '../types/schedule.type';
 import { useUserSchedules } from '../hooks/useUserSchedules';
 import { useThreadGroups } from '../hooks/useThreadGroups';
+import { useFriendSuggestions } from '../hooks/useFriendSuggestions';
 
 const mapThreadGroupToDisplay = (group: any) => ({
   id: group._id || group.id || '',
@@ -56,6 +57,13 @@ const mapScheduleToAppointment = (schedule: Schedule): Appointment => {
 export const HomePage: React.FC = () => {
   const { currentUser, language, refetchFriendList, refetchFriendRequests, setFriends } = useAppContext();
   const navigate = useNavigate();
+  
+  // Filter states for friend suggestions
+  const [teacherNameFilter, setTeacherNameFilter] = useState('');
+  const [nationalityFilter, setNationalityFilter] = useState('');
+  const [experienceFilter, setExperienceFilter] = useState('');
+  const [subjectsFilter, setSubjectsFilter] = useState('');
+  
   const {
     data: scheduleData,
     isLoading: isLoadingSchedules,
@@ -66,6 +74,32 @@ export const HomePage: React.FC = () => {
     isLoading: isLoadingGroups,
     refetch: refetchGroups,
   } = useThreadGroups(!!currentUser);
+
+  // Fetch friend suggestions with filters
+  const {
+    data: friendSuggestionsData,
+    isLoading: isLoadingSuggestions,
+    refetch: refetchSuggestions,
+  } = useFriendSuggestions(
+    {
+      page: 1,
+      limit: 10,
+      teacher_name: teacherNameFilter,
+      nationality: nationalityFilter,
+      years_of_experience: experienceFilter,
+      subjects: subjectsFilter,
+    },
+    !!currentUser
+  );
+
+  // Handle clear/reset filters
+  const handleClearFilters = () => {
+    setTeacherNameFilter('');
+    setNationalityFilter('');
+    setExperienceFilter('');
+    setSubjectsFilter('');
+    // refetch will be triggered automatically by React Query when queryKey changes
+  };
 
   const appointments: Appointment[] = useMemo(() => {
     if (scheduleData?.success && Array.isArray(scheduleData.data)) {
@@ -195,6 +229,21 @@ export const HomePage: React.FC = () => {
       onJoinGroup={handleJoinGroup}
       onViewAllTeachers={() => navigate('/teachers')}
       onViewAllGroups={() => navigate('/groups')}
+      friendSuggestions={friendSuggestionsData}
+      isLoadingSuggestions={isLoadingSuggestions}
+      onClearFilters={handleClearFilters}
+      onFilterChange={{
+        setTeacherName: setTeacherNameFilter,
+        setNationality: setNationalityFilter,
+        setExperience: setExperienceFilter,
+        setSubjects: setSubjectsFilter,
+      }}
+      filters={{
+        teacherName: teacherNameFilter,
+        nationality: nationalityFilter,
+        experience: experienceFilter,
+        subjects: subjectsFilter,
+      }}
     />
   );
 };

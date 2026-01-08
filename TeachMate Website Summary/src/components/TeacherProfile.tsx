@@ -123,21 +123,17 @@ export function TeacherProfile({ teacher, open, onClose, onStartChat, language }
           </Space>
         </div>
         
-        {/* Interests */}
+        {/* Favorite/Interests */}
         <div>
           <Space className="mb-3">
             <HeartOutlined className="text-gray-600" />
-            <Title level={5} className="mb-0">{t.interests}</Title>
+            <Title level={5} className="mb-0">{language === 'ja' ? '興味' : 'Sở thích'}</Title>
           </Space>
-          <List
-            size="small"
-            dataSource={teacher.interests}
-            renderItem={(interest: string) => (
-              <List.Item>
-                <Text>{interest}</Text>
-              </List.Item>
-            )}
-          />
+          {teacher.favorite ? (
+            <Paragraph className="text-gray-700">{teacher.favorite}</Paragraph>
+          ) : (
+            <Text type="secondary">{language === 'ja' ? 'データなし' : 'Không có dữ liệu'}</Text>
+          )}
         </div>
         
         {/* Bio */}

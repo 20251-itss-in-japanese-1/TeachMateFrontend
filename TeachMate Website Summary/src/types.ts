@@ -8,6 +8,8 @@ export interface Teacher {
   interests: string[];
   bio: string;
   subjects: string[];
+  sendFriend?: boolean;
+  favorite?: string;
 }
 
 export interface Message {

@@ -15,7 +15,9 @@ export function mapUserToTeacher(user: any): Teacher {
     experience: user.yearsExperience || user.experience || 0,
     interests: user.specialties_interest || [],
     bio: user.introduction || user.bio || '',
-    subjects: user.specialties_subject || []
+    subjects: user.specialties_subject || [],
+    sendFriend: user.sendFriend || false,
+    favorite: user.favorite || ''
   };
 }
 

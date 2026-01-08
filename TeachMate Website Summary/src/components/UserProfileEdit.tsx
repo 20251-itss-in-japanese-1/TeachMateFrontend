@@ -46,7 +46,6 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
   const [formData, setFormData] = useState<Teacher>(user);
   const [newSpecialty, setNewSpecialty] = useState('');
   const [newSubject, setNewSubject] = useState('');
-  const [newInterest, setNewInterest] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -60,6 +59,7 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
         bio: formData.bio,
         specialties_major: formData.specialties,
         specialties_subject: formData.subjects,
+        favorite: formData.favorite,
       };
 
       // Update profile then refetch to ensure freshest server data
@@ -115,23 +115,6 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
     setFormData({
       ...formData,
       subjects: formData.subjects.filter((_, i) => i !== index)
-    });
-  };
-
-  const addInterest = () => {
-    if (newInterest.trim()) {
-      setFormData({
-        ...formData,
-        interests: [...formData.interests, newInterest.trim()]
-      });
-      setNewInterest('');
-    }
-  };
-
-  const removeInterest = (index: number) => {
-    setFormData({
-      ...formData,
-      interests: formData.interests.filter((_, i) => i !== index)
     });
   };
 
@@ -218,6 +201,17 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
           />
         </div>
 
+        {/* Favorite */}
+        <div>
+          <Text strong className="block mb-2">{language === 'ja' ? '興味' : 'Sở thích'}</Text>
+          <TextArea
+            value={formData.favorite || ''}
+            onChange={(e) => setFormData({ ...formData, favorite: e.target.value })}
+            rows={2}
+            placeholder={language === 'ja' ? '興味を入力してください' : 'Nhập sở thích của bạn'}
+          />
+        </div>
+
         {/* Specialties */}
         <div>
           <Text strong className="block mb-2">{t.specialties}</Text>
@@ -265,32 +259,6 @@ export function UserProfileEdit({ user, open, onClose, onSave, language }: UserP
                 color="cyan"
               >
                 {subject}
-              </Tag>
-            ))}
-          </Space>
-        </div>
-
-        {/* Interests */}
-        <div>
-          <Text strong className="block mb-2">{t.interests}</Text>
-          <Space.Compact className="mb-3">
-            <AntInput
-              placeholder={t.addInterest}
-              value={newInterest}
-              onChange={(e) => setNewInterest(e.target.value)}
-              onPressEnter={addInterest}
-            />
-            <AntButton icon={<PlusOutlined />} onClick={addInterest} />
-          </Space.Compact>
-          <Space wrap>
-            {formData.interests.map((interest, index) => (
-              <Tag
-                key={index}
-                closable
-                onClose={() => removeInterest(index)}
-                color="green"
-              >
-                {interest}
               </Tag>
             ))}
           </Space>

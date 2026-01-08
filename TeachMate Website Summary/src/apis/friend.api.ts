@@ -2,8 +2,26 @@ import { FriendList, FriendSuggestion, GetFriendRequest } from '../types/friend.
 import { BaseResponse } from '../types/noti.type';
 import Http from './http';
 
-export async function friendSuggest(page: number, limit: number) {
-    const res = Http.get<FriendSuggestion>(`/friend/suggestions?page=${page}&limit=${limit}`);
+export interface FriendSuggestParams {
+    page?: number;
+    limit?: number;
+    teacher_name?: string;
+    nationality?: string;
+    years_of_experience?: string;
+    subjects?: string;
+}
+
+export async function friendSuggest(params: FriendSuggestParams = {}) {
+    const { page = 1, limit = 10, teacher_name = '', nationality = '', years_of_experience = '', subjects = '' } = params;
+    const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        ...(teacher_name && { teacher_name }),
+        ...(nationality && { nationality }),
+        ...(years_of_experience && { years_of_experience }),
+        ...(subjects && { subjects }),
+    });
+    const res = Http.get<FriendSuggestion>(`/friend/suggestions?${queryParams.toString()}`);
     return res.then(response => response.data);
 }
 

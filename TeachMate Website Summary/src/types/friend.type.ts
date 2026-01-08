@@ -26,6 +26,7 @@ export interface FriendSuggestion {
         specialties_major: [],
         specialties_subject: [],
         specialties_interest: [],
+        sendFriend: boolean;
     } [];
 }
 

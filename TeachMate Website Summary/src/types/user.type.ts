@@ -31,6 +31,7 @@ export interface UpdateUserProfileRequest {
   bio?: string;
   specialties_major?: string[] | string;
   specialties_subject?: string[] | string;
+  favorite?: string;
 }
 
 export interface UserData {
@@ -56,6 +57,7 @@ export interface UserData {
   facebookId?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  favorite?: string;
 }
 export interface UpdateUserProfileResponse {
   success: boolean;

@@ -156,6 +156,16 @@ export function UserProfileView({ user, open, onClose, language }: UserProfileVi
           </div>
         )}
 
+        {/* Favorite */}
+        {user.favorite && (
+          <div>
+            <Text strong style={{ fontSize: 16, display: 'block', marginBottom: 12 }}>
+              {language === 'ja' ? '興味' : 'Sở thích'}
+            </Text>
+            <Text style={{ whiteSpace: 'pre-wrap' }}>{user.favorite}</Text>
+          </div>
+        )}
+
         {/* Experience */}
         {user.experience && (
           <Card size="small" bordered={false} style={{ backgroundColor: '#f5f5f5' }}>
