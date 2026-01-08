@@ -53,6 +53,7 @@ import { toast } from 'sonner';
 import { Check, Eye } from 'lucide-react';
 import { sendMessage, sendMessageWithFile, createSchedule, createPoll, getThreadPolls, getThreadSchedules, votePoll, joinSchedule, leaveSchedule, getThreadChat, deleteMessage } from '../apis/chat.api';
 import { reportUser } from '../apis/user.api';
+import { leaveThreadGroup } from '../apis/thread.api';
 import { TeacherProfile } from './TeacherProfile';
 import { useThreadAttachments } from '../hooks/useThreadAttachments';
 
@@ -806,8 +807,36 @@ export function GroupChatInterface({
       okText: language === 'ja' ? '退出' : 'Rời nhóm',
       cancelText: language === 'ja' ? 'キャンセル' : 'Hủy',
       okButtonProps: { danger: true },
-      onOk() {
-        toast.success(language === 'ja' ? 'グループから退出しました' : 'Đã rời khỏi nhóm');
+      async onOk() {
+        try {
+          const threadId = threadDetail?.thread?._id || selectedGroup.id;
+          const response = await leaveThreadGroup(threadId);
+          
+          if (response?.success) {
+            toast.success(language === 'ja' ? 'グループから退出しました' : 'Đã rời khỏi nhóm');
+            
+            // Refetch threads if available
+            if (onRefreshThreads) {
+              await onRefreshThreads();
+            }
+            
+            // Navigate back to contacts or home
+            navigate('/contacts?tab=groups');
+          } else {
+            toast.error(
+              language === 'ja'
+                ? 'グループの退出に失敗しました'
+                : 'Không thể rời khỏi nhóm'
+            );
+          }
+        } catch (error: any) {
+          console.error('Failed to leave group:', error);
+          toast.error(
+            language === 'ja'
+              ? `エラー: ${error.response?.data?.message || error.message}`
+              : `Lỗi: ${error.response?.data?.message || error.message}`
+          );
+        }
       }
     });
   };
